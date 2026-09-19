@@ -1,8 +1,10 @@
 # DSB IT-Services & -Consulting — Brand CI
 
-Version 1.0 · September 2026 · Konzept: „Terminal Mark"
+Version 1.1 · September 2026 · Konzept: „Terminal Mark"
 
 Vollständig neu konstruiertes Markensystem auf Basis der ursprünglichen Sketch-Idee (`<`, `>`, `/`, `_`). Geometrie, Proportionen und Farbsystem wurden für professionelle Anwendung neu aufgebaut — nicht die Handzeichnung 1:1 übernommen.
+
+**Änderungen v1.1:** Akzentfarbe von Mint/Emerald auf Lime umgestellt, Wortmarke „DSB"/„dsb" von Monospace auf einen fetten Grotesk-Display-Font umgestellt (Monospace bleibt für Terminal-Chrome/Tagline), Abschnitt 7 um konkrete Namenskollisions-Funde ergänzt.
 
 ---
 
@@ -26,7 +28,7 @@ Vollständig neu konstruiertes Markensystem auf Basis der ursprünglichen Sketch
 | **Terminal Black** | `#1D1D1F` | 29, 29, 31 | 6, 6, 0, 88 | Primäre Fläche (dunkel), Text auf Hell |
 | **Cloud White** | `#F5F5F7` | 245, 245, 247 | 1, 1, 0, 3 | Primäre Fläche (hell) |
 | **Reinweiß** | `#FFFFFF` | 255, 255, 255 | 0, 0, 0, 0 | Marke auf dunklem Grund |
-| **Terminal Green** | `#2ED573` | 46, 213, 115 | 78, 0, 46, 16 | **Signature-Akzent** — Cursor, Links, CTAs, Erfolgsstatus |
+| **Lime** | `#A6E22E` | 166, 226, 46 | 27, 0, 80, 11 | **Signature-Akzent** — Cursor, Links, CTAs, Erfolgsstatus |
 | **Slate Gray** | `#86868B` | 134, 134, 139 | 4, 4, 0, 45 | Sekundärtext, Taglines |
 | **Border Gray** | `#3A3A3C` | 58, 58, 60 | 3, 3, 0, 76 | Trennlinien, Chrome-Rahmen (Dark) |
 | Traffic Red *(nur Fenster-Chrome)* | `#FF5F56` | 255, 95, 86 | 0, 63, 66, 0 | Nur im Terminal-Chrome-Element, kein Markenfarbe |
@@ -35,7 +37,9 @@ Vollständig neu konstruiertes Markensystem auf Basis der ursprünglichen Sketch
 
 \* CMYK-Werte sind rechnerische Näherungen (Standard-Konversion) für die erste Druck-Orientierung — vor Produktion mit dem ICC-Profil der Druckerei bzw. einem Pantone-Bridge-Fächer abgleichen. Nicht 1:1 als Sonderfarbe freigeben.
 
-**Kontrast:** Terminal Green auf Terminal Black erfüllt WCAG-Grafikkontrast (>3:1) komfortabel. Für Fließtext niemals Grau-auf-Grau oder Green-auf-White unter 14px einsetzen.
+**Kontrast:** Lime auf Terminal Black erfüllt WCAG-Grafikkontrast (>3:1) deutlich. Für Fließtext niemals Grau-auf-Grau oder Lime-auf-White unter 14px einsetzen — Lime ist ein Akzent, kein Lesefarbe.
+
+**Warum Lime statt Mint/Grün:** Klassischer Terminal-/Editor-Bezug (u. a. Monokai-Farbschema) statt generisches „Tech-Grün" — schärfer, unverwechselbarer, funktioniert als kleiner Akzent (Cursor, CTA) besser als in der Fläche.
 
 **Regel:** Genau **eine** Akzentfarbe. Die Ampel-Farben sind ausschließlich dekoratives Chrome-Element (Fenstersimulation), niemals als Markenfarbe in Diagrammen, Buttons o. Ä. verwenden — sonst verwässert der Wiedererkennungswert.
 
@@ -43,17 +47,25 @@ Vollständig neu konstruiertes Markensystem auf Basis der ursprünglichen Sketch
 
 ## 3. Typografie
 
+Zwei Rollen, bewusst getrennt — genau wie im Referenz-Screenshot (fette Headline + kleine Monospace-Terminalzeile):
+
 | Rolle | Font | Schnitt | Lizenz |
 |---|---|---|---|
-| **Primär (Cross-Plattform, Web, Office)** | JetBrains Mono | Bold/SemiBold (Wortmarke), Medium/Regular (Fließtext) | SIL Open Font License 1.1 — frei kommerziell nutz-, einbett- und modifizierbar |
-| **Enhancement (nur native Apple-Umgebung)** | SF Mono | via System-Fontstack | Apple-proprietär — **nicht** für Web-Embedding oder Drittsysteme lizenziert, nur auf Apple-Geräten via Systemfont zulässig |
+| **Display — Name/Headline** („DSB", „dsb") | Inter Display (Fallback: Inter) | ExtraBold 800, Letter-Spacing leicht negativ (−1 bis −2 %) | SIL Open Font License 1.1 — frei kommerziell nutz-, einbett- und modifizierbar |
+| **Mono — Terminal-Chrome/Tagline** (`// IT-Services & -Consulting`, Pfad-Zeile, Labels) | JetBrains Mono | Medium/Regular | SIL Open Font License 1.1 |
+| **Enhancement (nur native Apple-Umgebung)** | SF Mono | via System-Fontstack, ersetzt JetBrains Mono nur dort | Apple-proprietär — **nicht** für Web-Embedding oder Drittsysteme lizenziert |
 
-**CSS-Fontstack:**
+**Regel:** Der eigentliche Markenname („DSB"/„dsb") steht **immer** in Inter Display ExtraBold — nie in Monospace. Monospace ist reserviert für alles, was wie eine Terminal-Ausgabe wirken soll (Tagline, Pfad-Zeile, Meta-Labels). Die beiden Rollen nicht vertauschen, sonst geht der Kontrast zwischen „Marke" und „Terminal-Deko" verloren.
+
+**CSS-Fontstacks:**
 ```css
+/* Display / Wortmarke */
+font-family: 'Inter Display', 'Inter', ui-sans-serif, system-ui, sans-serif;
+/* Mono / Terminal-Chrome */
 font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 ```
 
-**Wichtiger Hinweis:** SF Mono niemals als Webfont hochladen/einbetten (Lizenzverletzung). JetBrains Mono ist der tatsächliche Cross-Plattform-Markenfont; SF Mono greift automatisch nur auf Apple-Geräten über den System-Fontstack.
+**Wichtiger Hinweis:** SF Mono niemals als Webfont hochladen/einbetten (Lizenzverletzung). Sowohl Inter als auch JetBrains Mono sind frei; SF Mono greift automatisch nur auf Apple-Geräten über den System-Fontstack.
 
 Alle Wortmarken-Dateien in `/svg` sind bereits **in Pfade konvertiert (outlined)** — sie rendern korrekt, auch ohne installierte Schrift auf dem Zielsystem.
 
@@ -111,7 +123,8 @@ Alle Wortmarken-Dateien in `/svg` sind bereits **in Pfade konvertiert (outlined)
 **Do:**
 - Symbol immer proportional skalieren (nie Höhe/Breite getrennt verzerren).
 - Auf dunklem Grund → Weiß/Green-Variante. Auf hellem Grund → Black/Green-Variante. Auf Fotos/komplexem Hintergrund → Mono-Variante mit dezentem Schlagschatten oder auf Terminal-Kachel setzen.
-- Cursor-Akzent bleibt immer Terminal Green — auch wenn die Struktur (Klammern) in Sonderfällen einfarbig läuft.
+- Cursor-Akzent bleibt immer Lime — auch wenn die Struktur (Klammern) in Sonderfällen einfarbig läuft.
+- Markenname „DSB"/„dsb" immer in Inter Display ExtraBold, nie in Monospace setzen.
 
 **Don't:**
 - Keine zweite Akzentfarbe einführen (kein Blau/Orange/Rot als „Highlight" — verwässert Wiedererkennung).
@@ -124,7 +137,18 @@ Alle Wortmarken-Dateien in `/svg` sind bereits **in Pfade konvertiert (outlined)
 
 ## 7. Rechtlicher Hinweis — vor Launch prüfen
 
-„DSB" ist als Kürzel bereits durch etablierte Dritte belegt (u. a. Danske Statsbaner/DSB — dänische Staatsbahn, im deutschsprachigen Raum bekannt; „Deutscher Schützenbund" nutzt ebenfalls DSB). Das ist kein Grund, das Konzept zu verwerfen, aber: **vor Investition in Druck, Domains oder Ad-Spend** eine Markenrecherche (DPMA-Register für DE, ggf. EUIPO für EU) in der einschlägigen Nizza-Klasse (IT-Dienstleistungen) durchführen. Eine reine Google-Prüfung reicht nicht — das ist ein Registerabgleich, keine Design-Frage. Ich bin kein Anwalt; das hier ist ein Hinweis, keine Rechtsberatung.
+**Verschärft gegenüber v1.0: konkrete Treffer, nicht nur generisches Risiko.** Websuche (September 2026) zeigt mindestens zwei bereits aktive deutsche IT-Unternehmen mit „DSB" im Namen:
+
+- **dsb IT-Services GmbH**, Neckarsulm — Domain `dsb-its.net`, HRB 734287 (AG Stuttgart), Geschäftsfeld laut Eigenbeschreibung: Software, Consulting, IT-Systemhaus. Name und Branche praktisch identisch zu „DSB IT-Services & -Consulting".
+- **DSB Data Service for Business GmbH**, Wismar/Hamburg/Rostock — Domain `dsbnet.de`, ebenfalls IT-Dienstleistungen.
+
+Dazu weiterhin die generischeren Kollisionen aus v1.0 (Danske Statsbaner, Deutscher Schützenbund) — hier eher Marken-/Verwechslungsrisiko außerhalb der Branche als direkte Namensgleichheit.
+
+**Eigene Domain:** `dsbitservices.de` — bereits klar unterschieden von `dsb-its.net` (der Neckarsulmer GmbH) und `dsbnet.de`. Das ist gut, löst aber die Namens-/Markenfrage nicht: Domain-Registrierung und Firmennamens-/Markenrecht sind zwei unabhängige Register. Eine freie Domain heißt nicht automatisch ein freier Firmen- oder Markenname.
+
+**Einordnung:** Das ist kein automatisches Show-Stopper — Kürzel-Überschneidungen sind bei drei Buchstaben statistisch normal, und Namensrecht hängt an Region, Branche und tatsächlicher Verwechslungsgefahr, nicht am bloßen Auftauchen in einer Google-Suche. Aber eine **fast namens- und branchengleiche, aktiv operierende GmbH** im selben Land ist ein deutlich konkreteres Risiko als eine übliche Kürzel-Kollision — das rechtfertigt eine Prüfung *vor* jeder weiteren Investition (Domain, Drucksachen, Ads), nicht erst vor dem Launch.
+
+**Nächster Schritt:** DPMA-Registerabgleich (Wortmarke + Wort-/Bildmarke, Nizza-Klasse 35/41/42 je nach Leistungsspektrum), Handelsregister-Abgleich auf Verwechslungsgefahr, ggf. anwaltliche Kurzprüfung. Ich bin kein Anwalt — das hier ist eine recherchierte Tatsachenfeststellung, keine Rechtsberatung.
 
 ---
 
