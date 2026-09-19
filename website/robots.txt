@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+
+# KI-/LLM-Crawler explizit erlaubt (Sichtbarkeit in AI-Antworten gewünscht)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://www.dsbitservices.de/sitemap.xml

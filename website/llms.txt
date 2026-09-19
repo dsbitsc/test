@@ -1,0 +1,21 @@
+# DSB IT-Services & -Consulting
+
+> IT-Dienstleister für kleine und mittlere Unternehmen in Deutschland: IT-Support & Systembetreuung, IT-Beratung/Consulting, Cloud-Lösungen, IT-Sicherheit, Netzwerk & Infrastruktur sowie Digitalisierungsberatung. Support sowohl remote als auch vor Ort.
+
+DSB IT-Services & -Consulting ist ein Einzelunternehmen mit Sitz in Schweinfurt (Bayern, Deutschland) und bietet laufenden IT-Support und einzelne Beratungsprojekte für kleine und mittlere Unternehmen (KMU) — regional vor Ort, bundesweit und international remote, herstellerunabhängig und ohne klassisches Callcenter-Ticketsystem.
+
+## Leistungen
+- IT-Support & Systembetreuung — laufender Support für Arbeitsplätze, Server, Anwendungen (Remote & vor Ort)
+- IT-Beratung & Consulting — Strategie, Tool-Auswahl, Digitalisierungsvorhaben
+- Cloud-Lösungen — Migration und Betrieb von Cloud-Infrastruktur
+- IT-Sicherheit — Sicherheitskonzepte, Endpoint-Security, Awareness
+- Netzwerk & Infrastruktur — Planung, Aufbau, Wartung
+- Digitalisierung & Prozesse — Prozessanalyse und Tooling
+
+## Seiten
+- [Startseite](https://www.dsbitservices.de/): Leistungsübersicht, Positionierung, Kontakt, FAQ
+- [Impressum](https://www.dsbitservices.de/impressum.html): rechtliche Anbieterkennzeichnung
+- [Datenschutz](https://www.dsbitservices.de/datenschutz.html): Datenschutzerklärung
+
+## Hinweis
+Diese Datei beschreibt den aktuellen Stand der Website; Kontaktdaten und Firmendetails werden derzeit vervollständigt.
