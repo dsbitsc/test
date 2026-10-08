@@ -115,10 +115,10 @@ export function crescentGeometry(R, h, depth, bend = 0, bendY = 0) {
 
 function earGeometry() {
   // flat, rounded triangle: thickness along X, width along Z, height along Y (origin at base)
-  const r = { x: 0.09, y: 0.2, z: 0.25 };
+  const r = { x: 0.1, y: 0.23, z: 0.28 };
   return ellipsoid(r.x, r.y, r.z, 36, 28, (v) => {
     const t = (v.y / r.y + 1) / 2;
-    v.z *= 1 - Math.pow(t, 1.5) * 0.72;
+    v.z *= 1 - Math.pow(t, 1.8) * 0.72;
     v.x *= 1 - t * 0.5;
     v.y += r.y;
   });
@@ -307,8 +307,8 @@ export function buildCharacter({ fur = true } = {}) {
   root.name = 'Gopi_Root';
 
   // ---- body: barrel, narrower toward the neck ----
-  const bodyC = new THREE.Vector3(-0.02, 0.68, 0);
-  const bodyR = new THREE.Vector3(0.7, 0.38, 0.4);
+  const bodyC = new THREE.Vector3(-0.06, 0.78, 0);
+  const bodyR = new THREE.Vector3(0.72, 0.38, 0.35);
   const body = new THREE.Group();
   body.name = 'Body';
   at(body, bodyC.x, bodyC.y, bodyC.z);
@@ -329,25 +329,25 @@ export function buildCharacter({ fur = true } = {}) {
   // ---- legs: straight pillars with round tan foot caps (pivot at hip) ----
   const legs = {};
   [
-    ['LegFL', 0.34, 0.21],
-    ['LegFR', 0.34, -0.21],
-    ['LegBL', -0.5, 0.22],
-    ['LegBR', -0.5, -0.22],
+    ['LegFL', 0.38, 0.19],
+    ['LegFR', 0.38, -0.19],
+    ['LegBL', -0.55, 0.2],
+    ['LegBR', -0.55, -0.2],
   ].forEach(([name, x, z], i) => {
-    const hip = new THREE.Vector3(x, 0.42, z);
+    const hip = new THREE.Vector3(x, 0.5, z);
     const leg = new THREE.Group();
     leg.name = name;
     at(leg, hip.x, hip.y, hip.z);
-    const lg = ellipsoid(0.14, 0.22, 0.14, 32, 24, (v) => {
-      const ny = v.y / 0.22;
+    const lg = ellipsoid(0.14, 0.27, 0.14, 32, 24, (v) => {
+      const ny = v.y / 0.27;
       const k = 1 + (1 - Math.min(1, ny * ny)) * 0.0; // pillar silhouette
       v.x *= k; v.z *= k;
     });
-    lg.translate(0, -0.14, 0);
+    lg.translate(0, -0.17, 0);
     leg.add(furPart(name + '_Fur', lg, { fur: F, len: 0.026, density: 105, seed: 10 + i }));
     const foot = new THREE.Mesh(ellipsoid(0.136, 0.074, 0.136, 32, 20), mats.foot);
     foot.name = name + '_Foot';
-    foot.position.set(0.012, -0.345, 0);
+    foot.position.set(0.012, -0.425, 0);
     leg.add(foot);
     root.add(leg);
     legs[name] = leg;
@@ -356,16 +356,16 @@ export function buildCharacter({ fur = true } = {}) {
   // ---- tail (pom-pom, high on the rump) ----
   const tail = new THREE.Group();
   tail.name = 'Tail';
-  at(tail, -0.7, 0.96, 0);
+  at(tail, -0.78, 1.12, 0);
   const pom = furPart('Tail_Fur', ellipsoid(0.16, 0.16, 0.16, 40, 28), { fur: F, len: 0.034, density: 95, seed: 20 });
   pom.position.set(-0.03, 0.06, 0);
   tail.add(pom);
   root.add(tail);
 
   // ---- head: big, wide, sits on the body like a cap ----
-  const neck = new THREE.Vector3(0.16, 0.99, 0);
-  const headC = new THREE.Vector3(0.38, 1.32, 0);
-  const headR = new THREE.Vector3(0.5, 0.4, 0.47);
+  const neck = new THREE.Vector3(0.16, 1.07, 0);
+  const headC = new THREE.Vector3(0.38, 1.43, 0);
+  const headR = new THREE.Vector3(0.52, 0.37, 0.48);
   const head = new THREE.Group();
   head.name = 'Head';
   at(head, neck.x, neck.y, neck.z);
@@ -373,7 +373,7 @@ export function buildCharacter({ fur = true } = {}) {
     'Head_Fur',
     ellipsoid(headR.x, headR.y, headR.z, 112, 80, (v) => {
       // squarer, flatter-topped "plush block" head
-      boxy(v, headR, 4, 0.35);
+      boxy(v, headR, 4, 0.5);
     }),
     { fur: F, len: 0.028, density: 95, seed: 30 }
   );
@@ -387,13 +387,13 @@ export function buildCharacter({ fur = true } = {}) {
     const s = side === 'L' ? 1 : -1;
     const ear = new THREE.Group();
     ear.name = 'Ear' + side;
-    ear.position.set(0.21, 1.55, s * 0.29).sub(neck);
+    ear.position.set(0.21, 1.65, s * 0.3).sub(neck);
     ear.rotation.set(s * 0.14, 0, 0.1); // lean outward and slightly back
     ear.add(furPart('Ear' + side + '_Fur', earG, { fur: F, len: 0.018, layers: 16, density: 150, seed: 40 + s }));
-    const innerGeo = ellipsoid(0.038, 0.15, 0.135, 28, 22, (v) => {
-      const t = (v.y / 0.15 + 1) / 2;
-      v.z *= 1 - Math.pow(t, 1.4) * 0.75;
-      v.y += 0.15;
+    const innerGeo = ellipsoid(0.042, 0.17, 0.155, 28, 22, (v) => {
+      const t = (v.y / 0.17 + 1) / 2;
+      v.z *= 1 - Math.pow(t, 1.6) * 0.75;
+      v.y += 0.17;
     });
     const inner = furPart('Ear' + side + '_Inner', innerGeo, { fur: F, color: PALETTE.yellowInner, len: 0.012, layers: 10, density: 220, clump: 45, seed: 60 + s, colors: ['#8f5f20', '#c98f30', '#efc060'] });
     inner.position.set(0.062, 0.03, 0);
@@ -403,9 +403,9 @@ export function buildCharacter({ fur = true } = {}) {
 
   // mane: three small stepped fur lobes down the back of the head
   [
-    ['Mane1', [-0.01, 1.56, 0.0], [0.1, 0.08, 0.2], -0.3],
-    ['Mane2', [-0.08, 1.4, 0.0], [0.11, 0.085, 0.23], -0.45],
-    ['Mane3', [-0.04, 1.24, 0.0], [0.1, 0.08, 0.21], -0.3],
+    ['Mane1', [-0.01, 1.67, 0.0], [0.13, 0.09, 0.24], -0.3],
+    ['Mane2', [-0.09, 1.51, 0.0], [0.14, 0.095, 0.27], -0.45],
+    ['Mane3', [-0.05, 1.35, 0.0], [0.13, 0.09, 0.25], -0.3],
   ].forEach(([name, p, r, rotZ], i) => {
     const t = furPart(name, ellipsoid(r[0], r[1], r[2], 28, 20), { fur: F, len: 0.024, layers: 18, density: 120, seed: 50 + i });
     t.position.set(p[0], p[1], p[2]).sub(neck);
@@ -459,7 +459,7 @@ export function buildCharacter({ fur = true } = {}) {
   });
 
   // ---- muzzle, nose, mouth: centered on the face front ----
-  const muzC = new THREE.Vector3(0.76, 1.25, 0);
+  const muzC = new THREE.Vector3(0.78, 1.36, 0);
   const muzR = new THREE.Vector3(0.15, 0.13, 0.17);
   const muzzle = furPart('Muzzle', ellipsoid(muzR.x, muzR.y, muzR.z, 40, 28), { fur: F, len: 0.014, density: 160, seed: 35 });
   muzzle.position.copy(muzC).sub(neck);
@@ -471,7 +471,7 @@ export function buildCharacter({ fur = true } = {}) {
     mats.nose
   );
   nose.name = 'Nose';
-  nose.position.set(0.906, 1.322, 0).sub(neck);
+  nose.position.set(0.926, 1.428, 0).sub(neck);
   nose.rotation.z = 0.35;
   head.add(nose);
 
@@ -486,22 +486,25 @@ export function buildCharacter({ fur = true } = {}) {
   }
 
   // ---- glyphs: thin raised gold comb letters ----
+  // glyph layout in normalized side-surface coordinates (Xn along the body, + = toward the chest; Yn = height), as in the reference frames
+  const sideDir = (Xn, Yn) => [Xn, Yn, Math.sqrt(Math.max(0.04, 1 - Xn * Xn - Yn * Yn))];
   const glyphSpecs = [
-    // name, parent, center, radii, dir, tilt(deg), size
+    // name, parent, center, radii, dir, tilt(deg), size, sides
     ['Glyph_Forehead', head, headC, headR, [-0.3, 0.3, 0.9], -20, { n: 2, W: 0.16, H: 0.13, prong: 0.03, base: 0.03 }],
-    ['Glyph_Mid', body, bodyC, bodyR, [0.4, -0.2, 0.88], -3, { n: 3, W: 0.52, H: 0.17, prong: 0.036, base: 0.036 }],
-    ['Glyph_Shoulder', body, bodyC, bodyR, [0.65, 0.25, 0.7], -5, { n: 3, W: 0.32, H: 0.12, prong: 0.032, base: 0.032 }],
-    ['Glyph_Back', body, bodyC, bodyR, [-0.2, 0.6, 0.78], 22, { n: 3, W: 0.32, H: 0.12, prong: 0.032, base: 0.032 }],
-    ['Glyph_Low', body, bodyC, bodyR, [-0.55, -0.12, 0.85], 12, { n: 3, W: 0.26, H: 0.11, prong: 0.03, base: 0.03 }],
-    ['Glyph_Rump', body, bodyC, bodyR, [-0.78, 0.15, 0.62], 80, { n: 3, W: 0.32, H: 0.12, prong: 0.03, base: 0.03 }],
-    ['Glyph_ChestHigh', body, bodyC, bodyR, [1, 0.25, 0.3], -3, { n: 3, W: 0.34, H: 0.12, prong: 0.032, base: 0.032 }, ['R']],
-    ['Glyph_ChestLow', body, bodyC, bodyR, [1, -0.2, 0.3], 4, { n: 3, W: 0.46, H: 0.15, prong: 0.036, base: 0.036 }, ['L']],
+    ['Glyph_Mid', body, bodyC, bodyR, sideDir(0.26, 0.1), -3, { n: 3, W: 0.48, H: 0.16, prong: 0.034, base: 0.034 }],
+    ['Glyph_Shoulder', body, bodyC, bodyR, sideDir(0.72, 0.45), -5, { n: 3, W: 0.3, H: 0.11, prong: 0.03, base: 0.03 }],
+    ['Glyph_Back', body, bodyC, bodyR, sideDir(-0.3, 0.6), 22, { n: 3, W: 0.3, H: 0.11, prong: 0.03, base: 0.03 }],
+    ['Glyph_Low', body, bodyC, bodyR, sideDir(-0.36, -0.02), 12, { n: 3, W: 0.24, H: 0.1, prong: 0.028, base: 0.028 }],
+    ['Glyph_Rump', body, bodyC, bodyR, sideDir(-0.85, 0.25), 80, { n: 3, W: 0.28, H: 0.11, prong: 0.028, base: 0.028 }],
+    ['Glyph_ChestHigh', body, bodyC, bodyR, [1, 0.25, 0.3], -3, { n: 3, W: 0.32, H: 0.11, prong: 0.03, base: 0.03 }, ['R']],
+    ['Glyph_ChestLow', body, bodyC, bodyR, [1, -0.2, 0.3], 4, { n: 3, W: 0.42, H: 0.14, prong: 0.034, base: 0.034 }, ['L']],
   ];
+
   glyphSpecs.forEach(([name, parent, c, r, dir, tilt, sz, sides]) => {
     (sides || ['L', 'R']).forEach((side) => {
       const s = side === 'L' ? 1 : -1;
       const d = new THREE.Vector3(dir[0], dir[1], dir[2] * s);
-      const { pos, q } = onSurface(c, r, d, s * tilt, 0.026, parent === body ? 0.55 : 0.35);
+      const { pos, q } = onSurface(c, r, d, s * tilt, 0.034, parent === body ? 0.55 : 0.5);
       const geo = glyphGeometry(sz.n, sz.W, sz.H, sz.prong, sz.base, 0.022);
       const m = new THREE.Mesh(geo, mats.yellow);
       m.name = name + '_' + side;
