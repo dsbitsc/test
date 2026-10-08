@@ -317,7 +317,7 @@ export function buildCharacter({ fur = true } = {}) {
     furPart(
       'Body_Fur',
       ellipsoid(bodyR.x, bodyR.y, bodyR.z, 112, 80, (v) => {
-        boxy(v, bodyR, 4, 0.55);
+        boxy(v, bodyR, 4, 0.7);
         const t = Math.max(0, v.y / bodyR.y);
         v.z *= 1 - t * 0.1;
       }),
@@ -364,8 +364,8 @@ export function buildCharacter({ fur = true } = {}) {
 
   // ---- head: big, wide, sits on the body like a cap ----
   const neck = new THREE.Vector3(0.16, 1.07, 0);
-  const headC = new THREE.Vector3(0.38, 1.43, 0);
-  const headR = new THREE.Vector3(0.52, 0.37, 0.48);
+  const headC = new THREE.Vector3(0.36, 1.43, 0);
+  const headR = new THREE.Vector3(0.47, 0.4, 0.5);
   const head = new THREE.Group();
   head.name = 'Head';
   at(head, neck.x, neck.y, neck.z);
@@ -373,7 +373,7 @@ export function buildCharacter({ fur = true } = {}) {
     'Head_Fur',
     ellipsoid(headR.x, headR.y, headR.z, 112, 80, (v) => {
       // squarer, flatter-topped "plush block" head
-      boxy(v, headR, 4, 0.5);
+      boxy(v, headR, 4, 0.62);
     }),
     { fur: F, len: 0.028, density: 95, seed: 30 }
   );
@@ -459,7 +459,7 @@ export function buildCharacter({ fur = true } = {}) {
   });
 
   // ---- muzzle, nose, mouth: centered on the face front ----
-  const muzC = new THREE.Vector3(0.78, 1.36, 0);
+  const muzC = new THREE.Vector3(0.74, 1.37, 0);
   const muzR = new THREE.Vector3(0.15, 0.13, 0.17);
   const muzzle = furPart('Muzzle', ellipsoid(muzR.x, muzR.y, muzR.z, 40, 28), { fur: F, len: 0.014, density: 160, seed: 35 });
   muzzle.position.copy(muzC).sub(neck);
@@ -471,7 +471,7 @@ export function buildCharacter({ fur = true } = {}) {
     mats.nose
   );
   nose.name = 'Nose';
-  nose.position.set(0.926, 1.428, 0).sub(neck);
+  nose.position.set(0.884, 1.438, 0).sub(neck);
   nose.rotation.z = 0.35;
   head.add(nose);
 
@@ -491,20 +491,20 @@ export function buildCharacter({ fur = true } = {}) {
   const glyphSpecs = [
     // name, parent, center, radii, dir, tilt(deg), size, sides
     ['Glyph_Forehead', head, headC, headR, [-0.3, 0.3, 0.9], -20, { n: 2, W: 0.16, H: 0.13, prong: 0.03, base: 0.03 }],
-    ['Glyph_Mid', body, bodyC, bodyR, sideDir(0.26, 0.1), -3, { n: 3, W: 0.48, H: 0.16, prong: 0.034, base: 0.034 }],
-    ['Glyph_Shoulder', body, bodyC, bodyR, sideDir(0.72, 0.45), -5, { n: 3, W: 0.3, H: 0.11, prong: 0.03, base: 0.03 }],
-    ['Glyph_Back', body, bodyC, bodyR, sideDir(-0.3, 0.6), 22, { n: 3, W: 0.3, H: 0.11, prong: 0.03, base: 0.03 }],
-    ['Glyph_Low', body, bodyC, bodyR, sideDir(-0.36, -0.02), 12, { n: 3, W: 0.24, H: 0.1, prong: 0.028, base: 0.028 }],
+    ['Glyph_Mid', body, bodyC, bodyR, sideDir(0.3, 0.08), -3, { n: 3, W: 0.4, H: 0.14, prong: 0.032, base: 0.032 }],
+    ['Glyph_Shoulder', body, bodyC, bodyR, sideDir(0.74, 0.42), -5, { n: 3, W: 0.26, H: 0.1, prong: 0.028, base: 0.028 }],
+    ['Glyph_Back', body, bodyC, bodyR, sideDir(-0.28, 0.62), 22, { n: 3, W: 0.26, H: 0.1, prong: 0.028, base: 0.028 }],
+    ['Glyph_Low', body, bodyC, bodyR, sideDir(-0.42, -0.02), 12, { n: 3, W: 0.22, H: 0.09, prong: 0.026, base: 0.026 }],
     ['Glyph_Rump', body, bodyC, bodyR, sideDir(-0.85, 0.25), 80, { n: 3, W: 0.28, H: 0.11, prong: 0.028, base: 0.028 }],
-    ['Glyph_ChestHigh', body, bodyC, bodyR, [1, 0.25, 0.3], -3, { n: 3, W: 0.32, H: 0.11, prong: 0.03, base: 0.03 }, ['R']],
-    ['Glyph_ChestLow', body, bodyC, bodyR, [1, -0.2, 0.3], 4, { n: 3, W: 0.42, H: 0.14, prong: 0.034, base: 0.034 }, ['L']],
+    ['Glyph_ChestHigh', body, bodyC, bodyR, [0.9, 0.22, 0.5], -3, { n: 3, W: 0.26, H: 0.1, prong: 0.028, base: 0.028 }, ['R']],
+    ['Glyph_ChestLow', body, bodyC, bodyR, [0.9, -0.2, 0.5], 4, { n: 3, W: 0.32, H: 0.11, prong: 0.03, base: 0.03 }, ['L']],
   ];
 
   glyphSpecs.forEach(([name, parent, c, r, dir, tilt, sz, sides]) => {
     (sides || ['L', 'R']).forEach((side) => {
       const s = side === 'L' ? 1 : -1;
       const d = new THREE.Vector3(dir[0], dir[1], dir[2] * s);
-      const { pos, q } = onSurface(c, r, d, s * tilt, 0.034, parent === body ? 0.55 : 0.5);
+      const { pos, q } = onSurface(c, r, d, s * tilt, 0.034, parent === body ? 0.7 : 0.62);
       const geo = glyphGeometry(sz.n, sz.W, sz.H, sz.prong, sz.base, 0.022);
       const m = new THREE.Mesh(geo, mats.yellow);
       m.name = name + '_' + side;

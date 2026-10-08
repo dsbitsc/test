@@ -129,8 +129,8 @@ def assign(obj, mat):
 
 FUR_PARTS = {
     # name: (hair length, parents per m2, children, curl amplitude, hair material)
-    'Body_Fur_Mesh': (0.042, 9000, 12, 0.016, 'hair'),
-    'Head_Fur_Mesh': (0.038, 11000, 12, 0.015, 'hair'),
+    'Body_Fur_Mesh': (0.05, 5500, 7, 0.024, 'hair'),
+    'Head_Fur_Mesh': (0.046, 6500, 7, 0.022, 'hair'),
     'Muzzle_Mesh': (0.016, 9000, 8, 0.005, 'hair'),
     'Tail_Fur_Mesh': (0.055, 9000, 14, 0.016, 'hair'),
     'EarL_Fur_Mesh': (0.028, 9000, 10, 0.008, 'hair'),
@@ -191,7 +191,7 @@ def add_fur(obj, length, per_m2, children, curl, matkey, seed):
     st.kink_flat = 0.0
     st.root_radius = 1.0
     st.tip_radius = 0.7
-    st.radius_scale = 0.0035 if length > 0.02 else 0.003
+    st.radius_scale = 0.0065 if length > 0.03 else 0.0045
     st.material = 2
     st.use_hair_bspline = True
     if 'hairmask' in obj.vertex_groups:
