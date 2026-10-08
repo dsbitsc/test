@@ -54,5 +54,14 @@ Im Viewer: Shell-Fur-Shader (20 Schichten, Rim-Licht). Im GLB: **nur Basis-Mesh*
 Pipeline: `vector.html` rendert flache, cel-schattierte Orthografie-Ansichten (transparent, 2000 px) aus `character.js`, `vectorize.py` wandelt sie mit vtracer in geschichtete SVGs um. Nach Änderungen an `character.js` beide Schritte wiederholen (Playwright-Skript im PR-Text nicht enthalten: Seite öffnen, `renderView('side'|'front'|'back'|'top'|'threeq')` aufrufen, Canvas als PNG nach `vector/png/` speichern).
 Grenzen: Die SVGs sind getracte Flächen (ca. 60 Pfade je Ansicht), keine handgezeichneten Kurven. Das Fell erscheint als Vollfläche ohne Textur. Für Schnittmuster-Produktion muss ein Plüsch-Designer die Teile (Kopf, Körper, Ohren, Beine, Mähne, Schwanz) separat ausarbeiten.
 
-## Gesicht (v2)
-Schnauze als Fellkörper, Nase als flaches Creme-Pad auf der Schnauze, Mund als flache Creme-Sichel (Lächeln) beidseitig auf dem Kopf, Augen mit schwerem Oberlid (müder Blick), Pupille unten Richtung Hinterkopf.
+## Gesicht und Körper (v5, nach Referenzbildern/Video)
+- Aufbau: Lama/Piñata aus Plüsch. Breiter, kantiger Kopf sitzt wie eine Kappe auf einem langen Fass-Körper (Naht am Hals), dicke Beine, runde Tan-Kappen als Füße, Pom-Pom-Schwanz hoch am Rücken, kurze gestufte Mähne am Hinterkopf.
+- Augen: ovale Cremeflecken, der Kopfwölbung folgend, dünner dunkler Rand, schweres Oberlid (müder Blick, Lid fällt zur Nase hin ab), runde Pupillen Richtung Nase und leicht nach unten.
+- Nase: cremefarbenes Schildpolster (oben breiter) auf der Schnauze. Mund: eine breite, glatte Creme-Sichel mittig unter der Nase, der Schnauze angepasst.
+- Ohren: aufrechte, gerundete Dreiecke an den oberen Kopfecken, innen kurzes goldenes Fell.
+- Glyphen: dünne Gold-Kämme („ɯ", Zinken nach oben, metallisch), 8 Stück: Stirn und 5 Körperglyphen beidseitig, 2 Brustglyphen asymmetrisch (rechts oben, links unten).
+- Fell: sehr dunkles Navy, lockige Bouclé-Struktur mit Schlingen, weiches Licht, Wurzel-Verschattung, Unterseite dunkler (Shell-Shader, 36 Schichten normal, 58 hoch). Im GLB nur Basis-Mesh.
+- Vergleichsbild mit den drei Referenzen: `reference-compare.png`.
+
+## Bedienung Viewer
+Panel links: Ansicht, Animation, Fell an/aus, Fell-Länge, Fell-Qualität (Normal/Hoch), Hintergrund. Der Hintergrund ist nur Beiwerk, das Modell ist unabhängig davon.

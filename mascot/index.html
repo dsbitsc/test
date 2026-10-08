@@ -45,10 +45,14 @@
   <label><input type="checkbox" id="fur" checked> Fell (Shells)</label>
   <div>Rim-Licht <input type="range" id="rim" min="0" max="2" step="0.05" value="0.9"></div>
   <div>Fell-Länge <input type="range" id="furlen" min="0.4" max="1.6" step="0.05" value="1"></div>
+  <h2>Fell-Qualität</h2>
+  <div class="row" id="quality">
+    <button data-q="1.5" class="on">Normal</button><button data-q="2.4">Hoch</button>
+  </div>
   <h2>Hintergrund</h2>
   <div class="row" id="bgs">
     <button data-b="midnight" class="on">Midnight</button><button data-b="sun">Sun</button>
-    <button data-b="studio">Studio</button><button data-b="checker">Transparent</button>
+    <button data-b="studio">Studio</button><button data-b="dunes">Video-Szene</button><button data-b="checker">Transparent</button>
   </div>
   <h2>Export</h2>
   <div class="row">
@@ -68,7 +72,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { buildCharacter, buildClips, stripFur, furUniforms } from './character.js';
+import { buildCharacter, buildClips, stripFur, furUniforms, FUR } from './character.js';
+try { if (new URLSearchParams(location.search).get('q') === 'hq') FUR.layerScale = 2.2; } catch (e) {}
 
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -87,36 +92,73 @@ scene.environmentIntensity = 0.35;
 
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0.1, 0.9, 0);
+controls.target.set(0.1, 0.98, 0);
 controls.enableDamping = true;
 controls.minDistance = 1.2; controls.maxDistance = 9;
 
 // lights: warm key, orange rim from behind, navy fill
 const key = new THREE.DirectionalLight('#fff1d6', 1.7);
 key.position.set(2.5, 4, 3); key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048);
+key.shadow.mapSize.set(4096, 4096);
 Object.assign(key.shadow.camera, { left:-2, right:2, top:2, bottom:-2, near:0.5, far:12 });
-key.shadow.radius = 6; key.shadow.bias = -0.0004;
+key.shadow.radius = 8; key.shadow.bias = -0.0004;
 scene.add(key);
 const rimL = new THREE.DirectionalLight('#ffae1a', 3.0); rimL.position.set(-3, 2, -3); scene.add(rimL);
 const rimR = new THREE.DirectionalLight('#ffae1a', 1.6); rimR.position.set(3, 1.5, -3); scene.add(rimR);
-scene.add(new THREE.HemisphereLight('#6a70ff', '#201a40', 0.55));
+const hemi = new THREE.HemisphereLight('#6a70ff', '#201a40', 0.55);
+scene.add(hemi);
 
 const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.ShadowMaterial({ opacity: 0.35 }));
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
+// "Video" scene: sand floor, dunes, gold location pin, falling confetti
+const scenic = new THREE.Group(); scenic.visible = false; scene.add(scenic);
+const sandMat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 });
+const sand = new THREE.Mesh(new THREE.CircleGeometry(30, 64), sandMat('#ecc886'));
+sand.rotation.x = -Math.PI / 2; sand.receiveShadow = true; scenic.add(sand);
+[[-6, -9, 5, 2.4, 3.5, '#efc982'], [5, -11, 6, 3.2, 4, '#e8bb6f'], [0, -14, 9, 3.6, 5, '#f2d08f'], [-9, -4, 3, 1.8, 3, '#e9c07a'], [8, -5, 3.4, 2, 3, '#f0cb88']].forEach(([x, z, sx, sy, sz, c]) => {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), sandMat(c));
+  m.position.set(x, 0, z); m.scale.set(sx, sy, sz); m.receiveShadow = true; scenic.add(m);
+});
+{
+  const ps = new THREE.Shape();
+  ps.moveTo(0, -2.3); ps.bezierCurveTo(-0.5, -1.3, -1.1, -0.6, -1.1, 0.2); ps.absarc(0, 0.2, 1.1, Math.PI, 0, true); ps.bezierCurveTo(1.1, -0.6, 0.5, -1.3, 0, -2.3);
+  const hole = new THREE.Path(); hole.absarc(0, 0.2, 0.45, 0, Math.PI * 2, true); ps.holes.push(hole);
+  const pin = new THREE.Mesh(new THREE.ExtrudeGeometry(ps, { depth: 0.5, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 6, curveSegments: 40 }),
+    new THREE.MeshStandardMaterial({ color: '#e0a93a', metalness: 0.35, roughness: 0.45 }));
+  pin.position.set(3.4, 3.4, -6); pin.rotation.y = -0.35; scenic.add(pin);
+}
+const confetti = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.015, 0.16), new THREE.MeshStandardMaterial({ color: '#e8b94a', metalness: 0.9, roughness: 0.25, envMapIntensity: 3 }), 220);
+const confData = Array.from({ length: 220 }, () => ({ x: (Math.random() - 0.5) * 10, y: Math.random() * 6, z: Math.random() * 7 - 4, sp: 0.2 + Math.random() * 0.4, rx: Math.random() * 6, ry: Math.random() * 6, rs: 1 + Math.random() * 2 }));
+const dummy = new THREE.Object3D();
+function updConfetti(t) {
+  confData.forEach((d, i) => {
+    dummy.position.set(d.x, (((d.y - t * d.sp) % 6) + 6) % 6, d.z);
+    dummy.rotation.set(d.rx + t * d.rs, d.ry + t * d.rs * 0.7, 0);
+    dummy.updateMatrix(); confetti.setMatrixAt(i, dummy.matrix);
+  });
+  confetti.instanceMatrix.needsUpdate = true;
+}
+updConfetti(0); scenic.add(confetti);
+
 // character
-let hero, mixer, clips, actions = {}, current = null;
-hero = buildCharacter({ fur: true });
-hero.traverse((o) => { if (o.isMesh) { o.castShadow = !o.parent.userData.isFur; } });
-scene.add(hero);
-clips = buildClips(hero);
-mixer = new THREE.AnimationMixer(hero);
-clips.forEach((c) => (actions[c.name] = mixer.clipAction(c)));
-play('Idle');
+let hero, mixer, clips, actions = {}, current = null, currentName = 'Idle';
+function createHero() {
+  if (hero) scene.remove(hero);
+  hero = buildCharacter({ fur: true });
+  hero.traverse((o) => { if (o.isMesh) { o.castShadow = !o.parent.userData.isFur; } });
+  scene.add(hero);
+  clips = buildClips(hero);
+  mixer = new THREE.AnimationMixer(hero);
+  actions = {}; current = null;
+  clips.forEach((c) => (actions[c.name] = mixer.clipAction(c)));
+  play(currentName);
+}
+createHero();
 document.getElementById('status').remove();
 
 function play(name) {
+  currentName = name;
   if (current) current.fadeOut(0.25);
   current = name ? actions[name].reset().fadeIn(0.25).play() : null;
   if (!name) { mixer.stopAllAction(); hero.position.set(0,0,0); hero.scale.set(1,1,1); }
@@ -126,13 +168,14 @@ document.getElementById('anims').onclick = (e) => e.target.dataset.a !== undefin
 
 // views
 const VIEWS = {
-  three: [2.9, 1.7, 3.5], side: [0.1, 1.0, 5.0], front: [5.0, 1.0, 0.0],
-  back: [-5.0, 1.1, 0.0], top: [0.1, 5.6, 0.6], face: [1.5, 1.25, 1.6],
+  three: [3.0, 1.75, 3.6], side: [0.1, 1.05, 5.2], front: [5.2, 1.05, 0.0],
+  back: [-5.2, 1.15, 0.0], top: [0.1, 5.8, 0.6], face: [1.6, 1.3, 1.7],
+  facef: [2.7, 1.33, 0.02], ref1: [3.1, 1.5, -3.6], ref2: [5.0, 1.4, 0.5], ref3: [4.0, 1.35, -1.7],
 };
 function view(k) {
   const v = VIEWS[k];
   camera.position.set(...v);
-  controls.target.set(k === 'face' ? 0.45 : 0.1, k === 'face' ? 1.05 : 0.9, 0);
+  controls.target.set(k === 'facef' ? 0.6 : k === 'face' ? 0.5 : 0.1, k === 'facef' ? 1.3 : k === 'face' ? 1.12 : 1.0, 0);
   controls.update();
   document.querySelectorAll('#views button').forEach((b) => b.classList.toggle('on', b.dataset.v === k));
 }
@@ -152,19 +195,34 @@ document.getElementById('furlen').oninput = (e) => {
   }));
 };
 
+document.getElementById('quality').onclick = (e) => {
+  const q = e.target.dataset.q; if (!q) return;
+  FUR.layerScale = +q;
+  createHero();
+  shells().forEach((s) => (s.visible = document.getElementById('fur').checked));
+  document.getElementById('furlen').value = 1;
+  document.querySelectorAll('#quality button').forEach((b) => b.classList.toggle('on', b.dataset.q === q));
+};
+
 // backgrounds
 const BG = {
   midnight: 'radial-gradient(ellipse at 50% 60%, #1d2160 0%, #0e1038 55%, #070820 100%)',
   sun: 'radial-gradient(ellipse at 50% 45%, #ffe04d 0%, #ffc61a 55%, #f0a800 100%)',
   studio: 'radial-gradient(ellipse at 50% 40%, #6b6f85 0%, #3a3d52 70%, #25273a 100%)',
   checker: '',
+  dunes: 'linear-gradient(#fbebc8 0%, #f6dca6 55%, #efcf92 100%)',
 };
 function setBg(k) {
   document.body.dataset.bg = k;
   stage.style.background = BG[k];
   const mid = k === 'midnight';
+  const dunes = k === 'dunes';
+  scenic.visible = dunes; floor.visible = !dunes;
+  scene.fog = dunes ? new THREE.Fog('#f3d89f', 10, 26) : null;
+  key.color.set(dunes ? '#fff0d2' : '#fff1d6'); key.intensity = dunes ? 2.2 : 1.7;
+  hemi.color.set(dunes ? '#fff3dc' : '#6a70ff'); hemi.groundColor.set(dunes ? '#d9a95a' : '#201a40'); hemi.intensity = dunes ? 0.8 : 0.55;
   rimL.visible = rimR.visible = mid || k === 'studio';
-  furUniforms.uRimStrength.value = mid ? +document.getElementById('rim').value : 0.25;
+  furUniforms.uRimStrength.value = mid ? +document.getElementById('rim').value : 0.02;
   document.querySelectorAll('#bgs button').forEach((b) => b.classList.toggle('on', b.dataset.b === k));
 }
 document.getElementById('bgs').onclick = (e) => e.target.dataset.b && setBg(e.target.dataset.b);
@@ -208,6 +266,7 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   furUniforms.uTime.value += dt;
+  if (scenic.visible) updConfetti(clock.elapsedTime);
   mixer.update(dt);
   controls.update();
   renderer.render(scene, camera);
