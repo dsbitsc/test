@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gopi 3D Mascot</title>
+<style>
+  :root { --bg:#0b0d26; --panel:#12143a; --ink:#f4f1e6; --mute:#9aa0d0; --acc:#ffc61a; --line:#2a2d6b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  #stage { position:fixed; inset:0; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
+  #panel { position:fixed; top:12px; left:12px; width:236px; max-height:calc(100% - 24px); overflow:auto;
+    background:color-mix(in srgb,var(--panel) 92%,transparent); border:1px solid var(--line); border-radius:12px; padding:12px 14px; backdrop-filter:blur(6px); }
+  h1 { font-size:15px; margin:0 0 8px; letter-spacing:.04em; }
+  h2 { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--mute); margin:14px 0 6px; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; }
+  button { background:#1c1f52; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.on { background:var(--acc); color:#12143a; border-color:var(--acc); font-weight:600; }
+  label { display:flex; align-items:center; gap:8px; margin:4px 0; cursor:pointer; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  #hint { position:fixed; right:12px; bottom:10px; color:var(--mute); font-size:12px; text-align:right; pointer-events:none; }
+  #status { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--mute); }
+  body[data-bg=checker] #stage { background:conic-gradient(#ccc 25%,#eee 0 50%,#ccc 0 75%,#eee 0) 0 0/28px 28px; }
+  @media (max-width:560px){ #panel{ width:calc(100% - 24px); max-height:42%; top:auto; bottom:12px; } #hint{display:none} }
+</style>
+</head>
+<body data-bg="midnight">
+<div id="stage"></div>
+<div id="status">Lade Modell …</div>
+<div id="panel">
+  <h1>GOPI · 3D MASCOT</h1>
+  <h2>Ansicht</h2>
+  <div class="row" id="views">
+    <button data-v="three">3/4</button><button data-v="side">Seite</button><button data-v="front">Front</button>
+    <button data-v="back">Hinten</button><button data-v="top">Oben</button><button data-v="face">Gesicht</button>
+  </div>
+  <h2>Animation</h2>
+  <div class="row" id="anims">
+    <button data-a="Idle" class="on">Idle</button><button data-a="Walk">Walk</button><button data-a="Hop">Hop</button><button data-a="">Pose</button>
+  </div>
+  <label><input type="checkbox" id="turn"> Turntable</label>
+  <h2>Look</h2>
+  <label><input type="checkbox" id="fur" checked> Fell (Shells)</label>
+  <div>Rim-Licht <input type="range" id="rim" min="0" max="2" step="0.05" value="0.9"></div>
+  <div>Fell-Länge <input type="range" id="furlen" min="0.4" max="1.6" step="0.05" value="1"></div>
+  <h2>Hintergrund</h2>
+  <div class="row" id="bgs">
+    <button data-b="midnight" class="on">Midnight</button><button data-b="sun">Sun</button>
+    <button data-b="studio">Studio</button><button data-b="checker">Transparent</button>
+  </div>
+  <h2>Export</h2>
+  <div class="row">
+    <button id="png">PNG</button><button id="glb">GLB (Rig + Clips)</button>
+  </div>
+</div>
+<div id="hint">Ziehen = drehen · Scroll = Zoom · Rechtsklick = verschieben</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { buildCharacter, buildClips, stripFur, furUniforms } from './character.js';
+
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.35;
+
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0.1, 0.78, 0);
+controls.enableDamping = true;
+controls.minDistance = 1.2; controls.maxDistance = 9;
+
+// lights: warm key, orange rim from behind, navy fill
+const key = new THREE.DirectionalLight('#fff1d6', 2.2);
+key.position.set(2.5, 4, 3); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left:-2, right:2, top:2, bottom:-2, near:0.5, far:12 });
+key.shadow.radius = 6; key.shadow.bias = -0.0004;
+scene.add(key);
+const rimL = new THREE.DirectionalLight('#ffae1a', 3.0); rimL.position.set(-3, 2, -3); scene.add(rimL);
+const rimR = new THREE.DirectionalLight('#ffae1a', 1.6); rimR.position.set(3, 1.5, -3); scene.add(rimR);
+scene.add(new THREE.HemisphereLight('#6a70ff', '#201a40', 0.55));
+
+const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.ShadowMaterial({ opacity: 0.35 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+// character
+let hero, mixer, clips, actions = {}, current = null;
+hero = buildCharacter({ fur: true });
+hero.traverse((o) => { if (o.isMesh) { o.castShadow = !o.parent.userData.isFur; } });
+scene.add(hero);
+clips = buildClips(hero);
+mixer = new THREE.AnimationMixer(hero);
+clips.forEach((c) => (actions[c.name] = mixer.clipAction(c)));
+play('Idle');
+document.getElementById('status').remove();
+
+function play(name) {
+  if (current) current.fadeOut(0.25);
+  current = name ? actions[name].reset().fadeIn(0.25).play() : null;
+  if (!name) { mixer.stopAllAction(); hero.position.set(0,0,0); hero.scale.set(1,1,1); }
+  document.querySelectorAll('#anims button').forEach((b) => b.classList.toggle('on', b.dataset.a === name));
+}
+document.getElementById('anims').onclick = (e) => e.target.dataset.a !== undefined && play(e.target.dataset.a);
+
+// views
+const VIEWS = {
+  three: [2.6, 1.5, 3.2], side: [0.1, 0.9, 4.6], front: [4.6, 0.9, 0.0],
+  back: [-4.6, 1.0, 0.0], top: [0.1, 5.2, 0.6], face: [1.5, 1.15, 1.6],
+};
+function view(k) {
+  const v = VIEWS[k];
+  camera.position.set(...v);
+  controls.target.set(k === 'face' ? 0.45 : 0.1, k === 'face' ? 1.0 : 0.78, 0);
+  controls.update();
+  document.querySelectorAll('#views button').forEach((b) => b.classList.toggle('on', b.dataset.v === k));
+}
+document.getElementById('views').onclick = (e) => e.target.dataset.v && view(e.target.dataset.v);
+view('three');
+
+// look
+document.getElementById('turn').onchange = (e) => (controls.autoRotate = e.target.checked);
+controls.autoRotateSpeed = 2.2;
+const shells = () => { const a = []; hero.traverse((o) => o.userData.isFur && a.push(o)); return a; };
+document.getElementById('fur').onchange = (e) => shells().forEach((s) => (s.visible = e.target.checked));
+document.getElementById('rim').oninput = (e) => (furUniforms.uRimStrength.value = +e.target.value, rimL.intensity = 3 * e.target.value / 0.9, rimR.intensity = 1.6 * e.target.value / 0.9);
+document.getElementById('furlen').oninput = (e) => {
+  shells().forEach((g) => g.children.forEach((m) => {
+    m.userData.len0 ??= m.material.uniforms.uLen.value;
+    m.material.uniforms.uLen.value = m.userData.len0 * e.target.value;
+  }));
+};
+
+// backgrounds
+const BG = {
+  midnight: 'radial-gradient(ellipse at 50% 60%, #1d2160 0%, #0e1038 55%, #070820 100%)',
+  sun: 'radial-gradient(ellipse at 50% 45%, #ffe04d 0%, #ffc61a 55%, #f0a800 100%)',
+  studio: 'radial-gradient(ellipse at 50% 40%, #6b6f85 0%, #3a3d52 70%, #25273a 100%)',
+  checker: '',
+};
+function setBg(k) {
+  document.body.dataset.bg = k;
+  stage.style.background = BG[k];
+  const mid = k === 'midnight';
+  rimL.visible = rimR.visible = mid || k === 'studio';
+  furUniforms.uRimStrength.value = mid ? +document.getElementById('rim').value : 0.25;
+  document.querySelectorAll('#bgs button').forEach((b) => b.classList.toggle('on', b.dataset.b === k));
+}
+document.getElementById('bgs').onclick = (e) => e.target.dataset.b && setBg(e.target.dataset.b);
+setBg('midnight');
+
+// export
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+document.getElementById('png').onclick = () => {
+  controls.update(); renderer.render(scene, camera);
+  renderer.domElement.toBlob((b) => download(b, 'gopi.png'));
+};
+document.getElementById('glb').onclick = async () => {
+  const clean = buildCharacter({ fur: false });
+  const blob = await exportGLB(clean, buildClips(clean));
+  download(blob, 'gopi.glb');
+};
+async function exportGLB(obj, anims) {
+  const buf = await new GLTFExporter().parseAsync(obj, { binary: true, animations: anims });
+  return new Blob([buf], { type: 'model/gltf-binary' });
+}
+window.__gopi = { exportGLBBase64: async () => {
+  const clean = buildCharacter({ fur: false });
+  const blob = await exportGLB(clean, buildClips(clean));
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}, view, play, setBg };
+
+// loop
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  furUniforms.uTime.value += dt;
+  mixer.update(dt);
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
