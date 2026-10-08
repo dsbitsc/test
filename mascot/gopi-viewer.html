@@ -127,6 +127,28 @@ function glyphGeometry(n, W, H, prong, baseH, depth) {
   return g;
 }
 
+/** Flat crescent (smile): region between two equal circles offset by h. Local XY, extruded in Z. */
+function crescentGeometry(R, h, depth) {
+  const al = Math.asin(h / (2 * R));
+  const pts = [];
+  const N = 28;
+  for (let i = 0; i <= N; i++) {
+    const a = Math.PI + al + ((Math.PI - 2 * al) * i) / N;
+    pts.push(new THREE.Vector2(R * Math.cos(a), R * Math.sin(a)));
+  }
+  for (let i = 0; i <= N; i++) {
+    const a = 2 * Math.PI - al - ((Math.PI - 2 * al) * i) / N;
+    pts.push(new THREE.Vector2(R * Math.cos(a), h + R * Math.sin(a)));
+  }
+  const bevel = h * 0.28;
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), {
+    depth: depth - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments: 4, curveSegments: 4,
+  });
+  g.translate(0, R - h / 2, -(depth - bevel * 2) / 2);
+  g.computeVertexNormals();
+  return g;
+}
+
 function earGeometry() {
   // teardrop with pointed, slightly rounded tip, flat-ish in Z
   const r = { x: 0.17, y: 0.26, z: 0.085 };
@@ -401,8 +423,9 @@ function buildCharacter({ fur = true } = {}) {
     const s = side === 'L' ? 1 : -1;
     const eye = new THREE.Group();
     eye.name = 'Eye' + side;
-    eye.position.set(0.41, eyeY, s * 0.5).sub(neck);
-    eye.rotation.y = s > 0 ? 0.5 : Math.PI - 0.5; // face outward + forward
+    const ep = onSurface(headC, new THREE.Vector3(0.55, 0.44, 0.45), new THREE.Vector3(0.6, 0.0, 0.78 * s), 0, 0.01);
+    eye.position.copy(ep.pos).sub(neck);
+    eye.quaternion.copy(ep.q); // sits on the head surface, facing outward/forward
     const rim = new THREE.Mesh(ellipsoid(0.172, 0.26, 0.05, 48, 32), mats.black);
     rim.name = 'Eye' + side + '_Rim';
     eye.add(rim);
@@ -412,7 +435,7 @@ function buildCharacter({ fur = true } = {}) {
     eye.add(white);
     const pupil = new THREE.Group();
     pupil.name = 'Pupil' + side;
-    pupil.position.set(-0.055, -0.065, 0.045);
+    pupil.position.set(-0.055 * s, -0.065, 0.045);
     const pm = new THREE.Mesh(ellipsoid(0.07, 0.095, 0.035, 32, 24), mats.black);
     pm.name = 'Pupil' + side + '_Mesh';
     pupil.add(pm);
@@ -441,30 +464,29 @@ function buildCharacter({ fur = true } = {}) {
     head.add(eye);
   });
 
-  // nose
-  const nose = new THREE.Mesh(
-    ellipsoid(0.085, 0.06, 0.075, 28, 20, (v) => {
-      const t = (v.x / 0.085 + 1) / 2;
-      v.y += t * 0.0;
-      v.z *= 1 - t * 0.35;
-      v.y *= 1 - t * 0.35;
-    }),
-    mats.nose
-  );
+  // muzzle: rounded snout bump that carries nose and mouth
+  const muzC = new THREE.Vector3(0.7, 1.06, 0);
+  const muzR = new THREE.Vector3(0.26, 0.18, 0.21);
+  const muzzle = furPart('Muzzle', ellipsoid(muzR.x, muzR.y, muzR.z, 40, 28), { fur: F, len: 0.011, density: 170, seed: 35 });
+  muzzle.position.copy(muzC).sub(neck);
+  head.add(muzzle);
+
+  // nose: flat rounded cream pad on top-front of the muzzle
+  const nose = new THREE.Mesh(ellipsoid(0.08, 0.05, 0.1, 32, 22), mats.nose);
   nose.name = 'Nose';
-  nose.position.set(0.86, 1.08, 0).sub(neck);
-  nose.rotation.z = 0.25;
+  nose.position.set(0.9, 1.185, 0).sub(neck);
+  nose.rotation.z = -0.7;
   head.add(nose);
 
-  // smile arcs (cream, left+right), lying on the cheek surface
+  // mouth: flat cream crescent inlaid on each side of the muzzle (smile, ends curve up)
   ['L', 'R'].forEach((side) => {
     const s = side === 'L' ? 1 : -1;
-    const { pos, q } = onSurface(headC, headR, new THREE.Vector3(0.82, -0.4, 0.55 * s), 0, 0.03);
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.03, 14, 36, Math.PI * 0.9), mats.nose);
-    arc.name = 'Smile' + side;
-    arc.position.copy(pos).sub(neck);
-    arc.quaternion.copy(q).multiply(eul(0, 0, Math.PI * 1.025 + s * 0.35));
-    head.add(arc);
+    const { pos, q } = onSurface(headC, new THREE.Vector3(0.55, 0.44, 0.4), new THREE.Vector3(0.62, -0.5, 0.42 * s), 0, 0.035);
+    const mouth = new THREE.Mesh(crescentGeometry(0.1, 0.055, 0.05), mats.nose);
+    mouth.name = 'Mouth' + side;
+    mouth.position.copy(pos).sub(neck);
+    mouth.quaternion.copy(q).multiply(eul(0, 0, s * 0.12));
+    head.add(mouth);
   });
 
   // ---- glyphs ("E" comb marks) ----

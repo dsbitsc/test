@@ -48,3 +48,11 @@ Im Viewer: Shell-Fur-Shader (20 Schichten, Rim-Licht). Im GLB: **nur Basis-Mesh*
 - Prozedural, nicht handmodelliert: Silhouette und Fellqualität erreichen nicht das Niveau der Referenz-Renders.
 - Rig ohne Gesichts-Blendshapes und ohne Skinning.
 - Glyphen-Positionen sind aus den Referenzbildern geschätzt (beidseitig gespiegelt); Referenz zeigt nur die linke Seite.
+
+## Vektor-Ausgabe (v2)
+`vector/` enthält SVG-Referenzen (Seite, Front, Hinten, Oben, 3/4) und `gopi-turnaround.svg` (Blatt mit Farben) für Plüsch, Merch und Print.
+Pipeline: `vector.html` rendert flache, cel-schattierte Orthografie-Ansichten (transparent, 2000 px) aus `character.js`, `vectorize.py` wandelt sie mit vtracer in geschichtete SVGs um. Nach Änderungen an `character.js` beide Schritte wiederholen (Playwright-Skript im PR-Text nicht enthalten: Seite öffnen, `renderView('side'|'front'|'back'|'top'|'threeq')` aufrufen, Canvas als PNG nach `vector/png/` speichern).
+Grenzen: Die SVGs sind getracte Flächen (ca. 60 Pfade je Ansicht), keine handgezeichneten Kurven. Das Fell erscheint als Vollfläche ohne Textur. Für Schnittmuster-Produktion muss ein Plüsch-Designer die Teile (Kopf, Körper, Ohren, Beine, Mähne, Schwanz) separat ausarbeiten.
+
+## Gesicht (v2)
+Schnauze als Fellkörper, Nase als flaches Creme-Pad auf der Schnauze, Mund als flache Creme-Sichel (Lächeln) beidseitig auf dem Kopf, Augen mit schwerem Oberlid (müder Blick), Pupille unten Richtung Hinterkopf.
