@@ -52,7 +52,7 @@ export function glyphGeometry(n, W, H, prong, baseH, depth) {
     if (i > 0) pts.push([x0, baseH], [x0 - gap, baseH]);
   }
   const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
-  const bevel = Math.min(prong, baseH) * 0.42;
+  const bevel = Math.min(prong, baseH) * 0.36;
   const g = new THREE.ExtrudeGeometry(shape, {
     depth: depth - bevel * 2,
     bevelEnabled: true,
@@ -117,7 +117,8 @@ const SHELL_VS = /* glsl */ `
   void main(){
     vec3 p = position + normal * uLen * uLayer;
     p.y -= uLen * uLayer * uLayer * 0.35;                // gravity droop
-    p.x += sin(uTime*1.3 + position.y*6.0) * 0.004 * uLayer; // breeze
+    p += (normalize(cross(normal, vec3(0.0,1.0,0.001))) * sin(position.y*38.0 + position.x*31.0) + cross(normal, normalize(cross(normal, vec3(0.0,1.0,0.001)))) * cos(position.z*35.0 + position.y*29.0)) * uLen * 0.45 * uLayer; // curl
+    p.x += sin(uTime*1.3 + position.y*6.0) * 0.003 * uLayer; // breeze
     vObj = position;
     vec4 mv = modelViewMatrix * vec4(p,1.0);
     vN = normalize(normalMatrix * normal);
@@ -133,13 +134,14 @@ const SHELL_FS = /* glsl */ `
   void main(){
     vec3 q = vObj * uDensity + uSeed;
     vec3 c = floor(q);
-    float h = mix(0.35, 1.0, hash(c));                      // strand height
+    float h = mix(0.3, 1.0, hash(c)) * mix(0.72, 1.0, hash(floor(vObj*16.0))); // strand height with clumps
     vec3 jit = vec3(hash(c+7.1), hash(c+13.7), hash(c+23.3)) - 0.5;
     vec3 f = fract(q) - 0.5 - jit*0.55;
     float d = length(f);                                    // strand radius falloff
-    float thick = mix(0.6, 0.22, uLayer);
+    float thick = mix(0.66, 0.3, uLayer);
     if (uLayer > 0.0 && (h < uLayer || d > thick)) discard;
     vec3 col = mix(uBase, uMid, smoothstep(0.0,0.5,uLayer));
+    col *= 0.88 + 0.24 * hash(floor(vObj*34.0));
     col = mix(col, uTip, smoothstep(0.55,1.0,uLayer));
     vec3 n = normalize(vN);
     float diff = max(dot(n, normalize(uKeyDir)), 0.0);
@@ -221,6 +223,7 @@ export function buildCharacter({ fur = true } = {}) {
     yellow: plastic(PALETTE.yellow, 0.5),
     inner: new THREE.MeshPhysicalMaterial({ color: PALETTE.yellowInner, roughness: 0.95, sheen: 1, sheenColor: new THREE.Color('#fff2a0') }),
     cream: plastic(PALETTE.cream, 0.18),
+    lid: plastic('#e6bf80', 0.35),
     nose: plastic(PALETTE.nose, 0.35),
     black: plastic(PALETTE.black, 0.08),
   };
@@ -230,13 +233,13 @@ export function buildCharacter({ fur = true } = {}) {
   root.name = 'Gopi_Root';
 
   // ---- body ----
-  const bodyC = new THREE.Vector3(-0.05, 0.46, 0);
-  const bodyR = new THREE.Vector3(0.58, 0.4, 0.47);
+  const bodyC = new THREE.Vector3(-0.05, 0.58, 0);
+  const bodyR = new THREE.Vector3(0.56, 0.42, 0.47);
   const body = new THREE.Group();
   body.name = 'Body';
   at(body, bodyC.x, bodyC.y, bodyC.z);
   body.userData.origin = bodyC.clone();
-  body.add(furPart('Body_Fur', ellipsoid(bodyR.x, bodyR.y, bodyR.z, 64, 48), { fur: F, len: 0.013, density: 300, seed: 1 }));
+  body.add(furPart('Body_Fur', ellipsoid(bodyR.x, bodyR.y, bodyR.z, 64, 48), { fur: F, len: 0.032, density: 105, seed: 1 }));
   root.add(body);
 
   // ---- legs (pivot at hip) ----
@@ -247,16 +250,16 @@ export function buildCharacter({ fur = true } = {}) {
     ['LegBL', -0.34, 0.27],
     ['LegBR', -0.34, -0.27],
   ].forEach(([name, x, z], i) => {
-    const hip = new THREE.Vector3(x, 0.27, z);
+    const hip = new THREE.Vector3(x, 0.36, z);
     const leg = new THREE.Group();
     leg.name = name;
     at(leg, hip.x, hip.y, hip.z);
     const lg = ellipsoid(0.15, 0.2, 0.15, 32, 24);
-    lg.translate(0, -0.09, 0);
-    leg.add(furPart(name + '_Fur', lg, { fur: F, len: 0.011, density: 320, seed: 10 + i }));
+    lg.translate(0, -0.12, 0);
+    leg.add(furPart(name + '_Fur', lg, { fur: F, len: 0.026, density: 120, seed: 10 + i }));
     const foot = new THREE.Mesh(ellipsoid(0.19, 0.085, 0.155, 32, 20), mats.yellow);
     foot.name = name + '_Foot';
-    foot.position.set(0.045, -0.21, 0);
+    foot.position.set(0.045, -0.3, 0);
     leg.add(foot);
     root.add(leg);
     legs[name] = leg;
@@ -265,10 +268,10 @@ export function buildCharacter({ fur = true } = {}) {
   // ---- tail (pom-pom) ----
   const tail = new THREE.Group();
   tail.name = 'Tail';
-  at(tail, -0.52, 0.66, 0);
+  at(tail, -0.52, 0.76, 0);
   tail.add(
     (() => {
-      const p = furPart('Tail_Fur', ellipsoid(0.17, 0.17, 0.17, 40, 28), { fur: F, len: 0.02, density: 260, seed: 20 });
+      const p = furPart('Tail_Fur', ellipsoid(0.17, 0.17, 0.17, 40, 28), { fur: F, len: 0.04, density: 90, seed: 20 });
       p.position.set(0.07, 0.12, 0);
       return p;
     })()
@@ -276,8 +279,8 @@ export function buildCharacter({ fur = true } = {}) {
   root.add(tail);
 
   // ---- head ----
-  const neck = new THREE.Vector3(0.14, 0.9, 0);
-  const headC = new THREE.Vector3(0.34, 1.07, 0);
+  const neck = new THREE.Vector3(0.14, 0.97, 0);
+  const headC = new THREE.Vector3(0.34, 1.16, 0);
   const headR = new THREE.Vector3(0.55, 0.44, 0.47);
   const head = new THREE.Group();
   head.name = 'Head';
@@ -290,7 +293,7 @@ export function buildCharacter({ fur = true } = {}) {
       v.y -= t * t * 0.05;
       v.z *= 1 - t * t * 0.18;
     }),
-    { fur: F, len: 0.013, density: 300, seed: 30 }
+    { fur: F, len: 0.028, density: 115, seed: 30 }
   );
   headMesh.position.copy(headC).sub(neck);
   head.add(headMesh);
@@ -302,9 +305,9 @@ export function buildCharacter({ fur = true } = {}) {
     const s = side === 'L' ? 1 : -1;
     const ear = new THREE.Group();
     ear.name = 'Ear' + side;
-    ear.position.set(0.0, 1.31, s * 0.2).sub(neck);
+    ear.position.set(0.0, 1.4, s * 0.2).sub(neck);
     ear.rotation.set(s * 0.32, 0, -0.18); // out + back
-    const outer = furPart('Ear' + side + '_Fur', earG, { fur: F, len: 0.009, layers: 16, density: 340, seed: 40 + s });
+    const outer = furPart('Ear' + side + '_Fur', earG, { fur: F, len: 0.02, layers: 16, density: 150, seed: 40 + s });
     ear.add(outer);
     const innerGeo = ellipsoid(0.115, 0.19, 0.03, 32, 24, (v) => {
       const t = (v.y / 0.19 + 1) / 2;
@@ -320,24 +323,24 @@ export function buildCharacter({ fur = true } = {}) {
 
   // mane tufts: flat lobes stepping down the back of the neck
   [
-    ['Mane1', [-0.14, 1.12, 0.0], [0.17, 0.09, 0.26], -0.45],
-    ['Mane2', [-0.19, 0.93, 0.0], [0.2, 0.1, 0.3], -0.55],
-    ['Mane3', [-0.15, 0.75, 0.0], [0.2, 0.1, 0.32], -0.45],
-    ['Mane4', [-0.06, 0.6, 0.0], [0.18, 0.09, 0.3], -0.3],
+    ['Mane1', [-0.14, 1.2, 0.0], [0.17, 0.09, 0.26], -0.45],
+    ['Mane2', [-0.19, 1.01, 0.0], [0.2, 0.1, 0.3], -0.55],
+    ['Mane3', [-0.15, 0.83, 0.0], [0.2, 0.1, 0.32], -0.45],
+    ['Mane4', [-0.06, 0.68, 0.0], [0.18, 0.09, 0.3], -0.3],
   ].forEach(([name, p, r, rotZ], i) => {
-    const t = furPart(name, ellipsoid(r[0], r[1], r[2], 32, 22), { fur: F, len: 0.015, layers: 18, density: 280, seed: 50 + i });
+    const t = furPart(name, ellipsoid(r[0], r[1], r[2], 32, 22), { fur: F, len: 0.03, layers: 20, density: 100, seed: 50 + i });
     t.position.set(p[0], p[1], p[2]).sub(neck);
     t.rotation.z = rotZ;
     head.add(t);
   });
 
   // eyes (one per side, flattened, bulging out of the head)
-  const eyeY = 1.0;
+  const eyeY = 1.09;
   ['L', 'R'].forEach((side) => {
     const s = side === 'L' ? 1 : -1;
     const eye = new THREE.Group();
     eye.name = 'Eye' + side;
-    eye.position.set(0.41, eyeY, s * 0.472).sub(neck);
+    eye.position.set(0.41, eyeY, s * 0.5).sub(neck);
     eye.rotation.y = s > 0 ? 0.5 : Math.PI - 0.5; // face outward + forward
     const rim = new THREE.Mesh(ellipsoid(0.172, 0.26, 0.05, 48, 32), mats.black);
     rim.name = 'Eye' + side + '_Rim';
@@ -348,7 +351,7 @@ export function buildCharacter({ fur = true } = {}) {
     eye.add(white);
     const pupil = new THREE.Group();
     pupil.name = 'Pupil' + side;
-    pupil.position.set(-0.06, -0.03, 0.045);
+    pupil.position.set(-0.055, -0.065, 0.045);
     const pm = new THREE.Mesh(ellipsoid(0.07, 0.095, 0.035, 32, 24), mats.black);
     pm.name = 'Pupil' + side + '_Mesh';
     pupil.add(pm);
@@ -360,6 +363,20 @@ export function buildCharacter({ fur = true } = {}) {
     hl.position.set(0.024, 0.036, 0.03);
     pupil.add(hl);
     eye.add(pupil);
+    // heavy upper lid (sleepy look): flat-cut shell over the top of the eye
+    const lidGeo = ellipsoid(0.164, 0.25, 0.058, 48, 32, (v) => { if (v.y < 0.035) v.y = 0.035; });
+    const lid = new THREE.Group();
+    lid.name = 'Lid' + side;
+    lid.rotation.z = -0.1 * s;
+    const lidMesh = new THREE.Mesh(lidGeo, mats.lid);
+    lidMesh.name = 'Lid' + side + '_Mesh';
+    lidMesh.position.z = 0.014;
+    lid.add(lidMesh);
+    const lidLine = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.011, 0.02), mats.black);
+    lidLine.name = 'Lid' + side + '_Line';
+    lidLine.position.set(0, 0.035, 0.062);
+    lid.add(lidLine);
+    eye.add(lid);
     head.add(eye);
   });
 
@@ -374,15 +391,15 @@ export function buildCharacter({ fur = true } = {}) {
     mats.nose
   );
   nose.name = 'Nose';
-  nose.position.set(0.86, 0.99, 0).sub(neck);
+  nose.position.set(0.86, 1.08, 0).sub(neck);
   nose.rotation.z = 0.25;
   head.add(nose);
 
   // smile arcs (cream, left+right), lying on the cheek surface
   ['L', 'R'].forEach((side) => {
     const s = side === 'L' ? 1 : -1;
-    const { pos, q } = onSurface(headC, headR, new THREE.Vector3(0.82, -0.42, 0.55 * s), 0, 0.02);
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.02, 12, 32, Math.PI * 0.95), mats.nose);
+    const { pos, q } = onSurface(headC, headR, new THREE.Vector3(0.82, -0.4, 0.55 * s), 0, 0.03);
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.03, 14, 36, Math.PI * 0.9), mats.nose);
     arc.name = 'Smile' + side;
     arc.position.copy(pos).sub(neck);
     arc.quaternion.copy(q).multiply(eul(0, 0, Math.PI * 1.025 + s * 0.35));
@@ -392,17 +409,19 @@ export function buildCharacter({ fur = true } = {}) {
   // ---- glyphs ("E" comb marks) ----
   const glyphSpecs = [
     // name, parent, center, radii, dir, tilt, size
-    ['Glyph_Forehead', head, headC, headR, [-0.15, 0.5, 0.85], -25, { n: 2, W: 0.2, H: 0.17, prong: 0.062, base: 0.058 }],
-    ['Glyph_Back', body, bodyC, bodyR, [0.3, 0.3, 0.85], -22, { n: 3, W: 0.4, H: 0.21, prong: 0.062, base: 0.058 }],
-    ['Glyph_Flank', body, bodyC, bodyR, [-0.55, 0.05, 0.85], -28, { n: 3, W: 0.34, H: 0.2, prong: 0.056, base: 0.054 }],
-    ['Glyph_Chest', body, bodyC, bodyR, [0.9, -0.12, 0.38], 28, { n: 3, W: 0.26, H: 0.14, prong: 0.046, base: 0.044 }],
+    ['Glyph_Forehead', head, headC, headR, [-0.15, 0.5, 0.85], -25, { n: 2, W: 0.2, H: 0.17, prong: 0.05, base: 0.048 }],
+    ['Glyph_Back', body, bodyC, bodyR, [0.3, 0.45, 0.85], -22, { n: 3, W: 0.4, H: 0.2, prong: 0.05, base: 0.048 }],
+    ['Glyph_Flank', body, bodyC, bodyR, [-0.55, 0.02, 0.85], -28, { n: 3, W: 0.36, H: 0.2, prong: 0.048, base: 0.046 }],
+    ['Glyph_Belly', body, bodyC, bodyR, [0.4, -0.3, 0.85], -8, { n: 3, W: 0.26, H: 0.16, prong: 0.045, base: 0.043 }],
+    ['Glyph_Chest', body, bodyC, bodyR, [0.9, 0.0, 0.38], 80, { n: 3, W: 0.24, H: 0.14, prong: 0.042, base: 0.04 }],
+    ['Glyph_Rump', body, bodyC, bodyR, [-0.85, 0.15, 0.5], 75, { n: 3, W: 0.26, H: 0.15, prong: 0.044, base: 0.042 }],
   ];
   glyphSpecs.forEach(([name, parent, c, r, dir, tilt, sz]) => {
     ['L', 'R'].forEach((side) => {
       const s = side === 'L' ? 1 : -1;
       const d = new THREE.Vector3(dir[0], dir[1], dir[2] * s);
       const { pos, q } = onSurface(c, r, d, s * tilt, 0.012);
-      const geo = glyphGeometry(sz.n, sz.W, sz.H, sz.prong, sz.base, 0.055);
+      const geo = glyphGeometry(sz.n, sz.W, sz.H, sz.prong, sz.base, 0.045);
       const m = new THREE.Mesh(geo, mats.yellow);
       m.name = name + '_' + side;
       m.position.copy(pos).sub(parent.userData.origin || parent.position);
