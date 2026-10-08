@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gopi 3D Mascot</title>
+<style>:root{color-scheme:dark}
+  :root { --bg:#0b0d26; --panel:#12143a; --ink:#f4f1e6; --mute:#9aa0d0; --acc:#ffc61a; --line:#2a2d6b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:#0b0d26; color:var(--ink); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  #stage { position:fixed; inset:0; }
+  canvas { display:block; width:100%; height:100%; touch-action:none; }
+  #panel { position:fixed; top:12px; left:12px; width:236px; max-height:calc(100% - 24px); overflow:auto;
+    background:color-mix(in srgb,var(--panel) 92%,transparent); border:1px solid var(--line); border-radius:12px; padding:12px 14px; backdrop-filter:blur(6px); }
+  h1 { font-size:15px; margin:0 0 8px; letter-spacing:.04em; }
+  h2 { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--mute); margin:14px 0 6px; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; }
+  button { background:#1c1f52; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.on { background:var(--acc); color:#12143a; border-color:var(--acc); font-weight:600; }
+  label { display:flex; align-items:center; gap:8px; margin:4px 0; cursor:pointer; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  #hint { position:fixed; right:12px; bottom:10px; color:var(--mute); font-size:12px; text-align:right; pointer-events:none; }
+  #status { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--mute); }
+  body[data-bg=checker] #stage { background:conic-gradient(#ccc 25%,#eee 0 50%,#ccc 0 75%,#eee 0) 0 0/28px 28px; }
+  @media (max-width:560px){ #panel{ width:calc(100% - 24px); max-height:42%; top:auto; bottom:12px; } #hint{display:none} }
+</style>
+
+<div id="stage"></div>
+<div id="status">Lade Modell …</div>
+<div id="panel">
+  <h1>GOPI · 3D MASCOT</h1>
+  <h2>Ansicht</h2>
+  <div class="row" id="views">
+    <button data-v="three">3/4</button><button data-v="side">Seite</button><button data-v="front">Front</button>
+    <button data-v="back">Hinten</button><button data-v="top">Oben</button><button data-v="face">Gesicht</button>
+  </div>
+  <h2>Animation</h2>
+  <div class="row" id="anims">
+    <button data-a="Idle" class="on">Idle</button><button data-a="Walk">Walk</button><button data-a="Hop">Hop</button><button data-a="">Pose</button>
+  </div>
+  <label><input type="checkbox" id="turn"> Turntable</label>
+  <h2>Look</h2>
+  <label><input type="checkbox" id="fur" checked> Fell (Shells)</label>
+  <div>Rim-Licht <input type="range" id="rim" min="0" max="2" step="0.05" value="0.9"></div>
+  <div>Fell-Länge <input type="range" id="furlen" min="0.4" max="1.6" step="0.05" value="1"></div>
+  <h2>Fell-Qualität</h2>
+  <div class="row" id="quality">
+    <button data-q="1.5" class="on">Normal</button><button data-q="2.4">Hoch</button>
+  </div>
+  <h2>Hintergrund</h2>
+  <div class="row" id="bgs">
+    <button data-b="midnight" class="on">Midnight</button><button data-b="sun">Sun</button>
+    <button data-b="studio">Studio</button><button data-b="dunes">Video-Szene</button><button data-b="checker">Transparent</button>
+  </div>
+</div>
+<div id="hint">Ziehen = drehen · Scroll = Zoom · Rechtsklick = verschieben</div>
+
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+// GOPINYA mascot – procedural 3D character.
+// Single source of truth: used by the viewer (index.html) and the GLB export.
+// Axes: +X = looking direction, +Y = up, +Z = character's left side (viewer side in side view).
+// Units: 1.0 = approx. 0.67 of total height (total height ~1.6).
+
+
+const PALETTE = {
+  furBase: '#06071a',
+  fur: '#0e1033',
+  furTip: '#191c4a',
+  yellow: '#d9ac38',
+  yellowInner: '#d99a2e',
+  cream: '#f3e1bb',
+  nose: '#f1dab4',
+  lid: '#dcbc88',
+  foot: '#cfa850',
+  black: '#07070d',
+  rim: '#ffb52e',
+};
+
+// ---------- geometry helpers ----------
+
+function smooth(g) {
+  g.deleteAttribute('uv');
+  g.deleteAttribute('normal');
+  const m = mergeVertices(g, 1e-4);
+  m.computeVertexNormals();
+  return m;
+}
+
+/** Blend a scaled-sphere vertex toward a superellipsoid (boxier plush-toy block). */
+function boxy(v, r, p = 4, k = 0.5) {
+  const nx = Math.abs(v.x / r.x), ny = Math.abs(v.y / r.y), nz = Math.abs(v.z / r.z);
+  const f = 1 / Math.pow(Math.pow(nx, p) + Math.pow(ny, p) + Math.pow(nz, p), 1 / p);
+  const m = 1 + (f - 1) * k;
+  v.x *= m; v.y *= m; v.z *= m;
+}
+
+function ellipsoid(rx, ry, rz, ws = 48, hs = 32, deform) {
+  const g = new THREE.SphereGeometry(1, ws, hs);
+  const p = g.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    v.set(v.x * rx, v.y * ry, v.z * rz);
+    if (deform) deform(v);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  return smooth(g);
+}
+
+/** E/comb glyph: base bar + n prongs pointing +Y, rounded by bevel. Centered. */
+function glyphGeometry(n, W, H, prong, baseH, depth) {
+  const gap = (W - n * prong) / (n - 1);
+  const pts = [];
+  pts.push([0, 0], [W, 0]);
+  for (let i = n - 1; i >= 0; i--) {
+    const x0 = i * (prong + gap);
+    pts.push([x0 + prong, H], [x0, H]);
+    if (i > 0) pts.push([x0, baseH], [x0 - gap, baseH]);
+  }
+  const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+  const bevel = Math.min(prong, baseH) * 0.36;
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: depth - bevel * 2,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 7,
+    curveSegments: 6,
+  });
+  g.translate(-W / 2, -H / 2, -(depth - bevel * 2) / 2);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Flat crescent (smile): lower part of circle A (r=R) minus circle B shifted up by h. Smooth subdivided strip, local XY, bent along Z to hug a curved surface. */
+function crescentGeometry(R, h, depth, bend = 0, bendY = 0) {
+  const al = Math.asin(h / (2 * R));
+  const N = 64, M = 8;
+  const pos = [];
+  const idx = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const aA = Math.PI - al + t * (Math.PI + 2 * al);
+    const aB = Math.PI + al + t * (Math.PI - 2 * al);
+    const A = [R * Math.cos(aA), R * Math.sin(aA)];
+    const B = [R * Math.cos(aB), h + R * Math.sin(aB)];
+    for (let j = 0; j <= M; j++) {
+      const u = j / M;
+      pos.push(A[0] + (B[0] - A[0]) * u, A[1] + (B[1] - A[1]) * u, 0);
+    }
+  }
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < M; j++) {
+      const a = i * (M + 1) + j, b = a + 1, c = a + M + 1, d = c + 1;
+      idx.push(a, c, b, b, c, d);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeBoundingBox();
+  const cy = (g.boundingBox.max.y + g.boundingBox.min.y) / 2;
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i) - cy;
+    p.setXYZ(i, x, y, depth * 0.5 - bend * x * x - bendY * y * y);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+function earGeometry() {
+  // flat, rounded triangle: thickness along X, width along Z, height along Y (origin at base)
+  const r = { x: 0.09, y: 0.2, z: 0.25 };
+  return ellipsoid(r.x, r.y, r.z, 36, 28, (v) => {
+    const t = (v.y / r.y + 1) / 2;
+    v.z *= 1 - Math.pow(t, 1.5) * 0.72;
+    v.x *= 1 - t * 0.5;
+    v.y += r.y;
+  });
+}
+
+// ---------- materials ----------
+
+function furMat(color = PALETTE.fur) {
+  color = new THREE.Color(color).multiplyScalar(0.85);
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 0.92,
+    metalness: 0,
+    sheen: 1,
+    sheenRoughness: 0.5,
+    sheenColor: new THREE.Color(PALETTE.furTip),
+  });
+}
+function plastic(color, rough = 0.28, glow = 0.3) {
+  return new THREE.MeshStandardMaterial({ color, roughness: Math.max(rough, 0.55), metalness: 0, emissive: new THREE.Color(color), emissiveIntensity: glow });
+}
+function plasticOld(color, rough = 0.28) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: rough,
+    metalness: 0,
+    clearcoat: 0.25,
+    clearcoatRoughness: 0.4,
+  });
+}
+
+// ---------- fur shells (viewer only; stripped for GLB export) ----------
+
+const FUR = { layerScale: 1.5 };
+
+const furUniforms = {
+  uTime: { value: 0 },
+  uRimStrength: { value: 0.9 },
+  uRimColor: { value: new THREE.Color(PALETTE.rim) },
+  uKeyDir: { value: new THREE.Vector3(0.5, 0.8, 0.6).normalize() },
+};
+
+const SHELL_VS = /* glsl */ `
+  uniform float uLayer, uLen, uTime;
+  varying vec3 vObj, vN, vV, vNo, vM0, vM1, vM2;
+  void main(){
+    vec3 t = normalize(cross(normal, vec3(0.0,1.0,0.001)));
+    vec3 b = cross(normal, t);
+    vec3 p = position + normal * uLen * uLayer;
+    p.y -= uLen * uLayer * uLayer * 0.35;                // gravity droop
+    p += (t * sin(position.y*38.0 + position.x*31.0) + b * cos(position.z*35.0 + position.y*29.0)) * uLen * 0.5 * uLayer; // curl
+    p.x += sin(uTime*1.3 + position.y*6.0) * 0.003 * uLayer; // breeze
+    vObj = position; vNo = normal;
+    vM0 = normalMatrix[0]; vM1 = normalMatrix[1]; vM2 = normalMatrix[2];
+    vec4 mv = modelViewMatrix * vec4(p,1.0);
+    vN = normalize(normalMatrix * normal);
+    vV = normalize(-mv.xyz);
+    gl_Position = projectionMatrix * mv;
+  }`;
+const SHELL_FS = /* glsl */ `
+  uniform float uLayer, uSeed, uDensity, uClump;
+  uniform vec3 uBase, uMid, uTip, uRimColor, uKeyDir;
+  uniform float uRimStrength;
+  varying vec3 vObj, vN, vV, vNo, vM0, vM1, vM2;
+  float hash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+  void main(){
+    // fine strands
+    vec3 q = vObj * uDensity + uSeed;
+    vec3 c = floor(q);
+    float hs = mix(0.35, 1.0, hash(c));
+    vec3 jit = vec3(hash(c+7.1), hash(c+13.7), hash(c+23.3)) - 0.5;
+    vec3 f = fract(q) - 0.5 - jit*0.55;
+    float d = length(f);
+    // boucle loops: rounded clumps that raise the pile
+    vec3 q2 = vObj * uClump + uSeed*1.7;
+    vec3 c2 = floor(q2);
+    vec3 j2 = vec3(hash(c2+3.1), hash(c2+9.7), hash(c2+17.3)) - 0.5;
+    vec3 f2 = fract(q2) - 0.5 - j2*0.7;
+    float bump = 1.0 - smoothstep(0.05, 0.85, length(f2));
+    float h = hs * mix(0.45, 1.0, bump);
+    float thick = mix(0.66, 0.3, uLayer);
+    if (uLayer > 0.0 && (h < uLayer || d > thick)) discard;
+
+    // shading: perturbed normal from the loop shape, soft wrap light, root occlusion, sheen
+    vec3 grad = vM0*f2.x + vM1*f2.y + vM2*f2.z;
+    vec3 n = normalize(normalize(vN) + grad * 0.9 * (0.4 + uLayer));
+    vec3 L = normalize(uKeyDir);
+    float ndl = dot(n, L);
+    float diff = max(ndl, 0.0);
+    float wrap = max(ndl*0.5 + 0.5, 0.0);
+    float amb = 0.42 + 0.3*n.y*0.5;
+    float ao = mix(0.35, 1.0, smoothstep(0.0, 0.85, uLayer)) * mix(0.62, 1.0, bump);
+    float under = mix(0.55, 1.0, smoothstep(-0.8, 0.3, normalize(vNo).y));
+    vec3 col = mix(uBase, uMid, smoothstep(0.0, 0.5, uLayer));
+    col *= 0.8 + 0.4 * hash(floor(vObj*34.0));
+    col = mix(col, uTip, smoothstep(0.5, 1.0, uLayer) * (0.4 + 0.6*bump));
+    col *= (amb + diff*0.55 + wrap*0.2) * ao * under;
+    vec3 H = normalize(L + normalize(vV));
+    col += uTip * pow(max(dot(n, H), 0.0), 18.0) * 0.35 * uLayer;
+    float fres = pow(1.0 - max(dot(n, normalize(vV)),0.0), 4.5);
+    col += uRimColor * fres * uRimStrength * (0.2 + uLayer*1.1);
+    gl_FragColor = vec4(col, 1.0);
+    #include <colorspace_fragment>
+  }`;
+
+function makeShells(geometry, { len = 0.05, layers = 24, density = 70, seed = 0, tint, clump = 26, colors } = {}) {
+  layers = Math.round(layers * FUR.layerScale);
+  const grp = new THREE.Group();
+  grp.name = 'FurShells';
+  grp.userData.isFur = true;
+  const base = colors ? new THREE.Color(colors[0]) : new THREE.Color(PALETTE.fur).multiplyScalar(0.8);
+  const mid = colors ? new THREE.Color(colors[1]) : new THREE.Color(PALETTE.fur).lerp(new THREE.Color(PALETTE.furTip), 0.25);
+  const tip = colors ? new THREE.Color(colors[2]) : new THREE.Color(tint || PALETTE.furTip);
+  for (let i = 1; i <= layers; i++) {
+    const m = new THREE.ShaderMaterial({
+      vertexShader: SHELL_VS,
+      fragmentShader: SHELL_FS,
+      uniforms: {
+        ...furUniforms,
+        uLayer: { value: i / layers },
+        uLen: { value: len },
+        uSeed: { value: seed },
+        uDensity: { value: density },
+        uClump: { value: clump },
+        uBase: { value: base },
+        uMid: { value: mid },
+        uTip: { value: tip },
+      },
+    });
+    const mesh = new THREE.Mesh(geometry, m);
+    mesh.frustumCulled = false;
+    grp.add(mesh);
+  }
+  return grp;
+}
+
+/** Part with base mesh (exported) + fur shells (viewer-only). */
+function furPart(name, geometry, opts = {}) {
+  const g = new THREE.Group();
+  g.name = name;
+  const base = new THREE.Mesh(geometry, furMat(opts.color));
+  base.name = name + '_Mesh';
+  g.add(base);
+  if (opts.fur !== false) g.add(makeShells(geometry, opts));
+  return g;
+}
+
+const eul = (x, y, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
+
+// ---------- build ----------
+
+function at(group, x, y, z) {
+  group.position.set(x, y, z);
+  return group;
+}
+
+/** Position/orientation on an ellipsoid surface, glyph-up along tangent plane. */
+function onSurface(center, radii, dir, tiltDeg, lift, boxyK = 0) {
+  const d = dir.clone().normalize();
+  const k = 1 / Math.sqrt((d.x / radii.x) ** 2 + (d.y / radii.y) ** 2 + (d.z / radii.z) ** 2);
+  const rel = d.clone().multiplyScalar(k);
+  if (boxyK) boxy(rel, radii, 4, boxyK);
+  const n = new THREE.Vector3(rel.x / radii.x ** 2, rel.y / radii.y ** 2, rel.z / radii.z ** 2).normalize();
+  const up = Math.abs(n.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const x = new THREE.Vector3().crossVectors(up, n).normalize();
+  const y = new THREE.Vector3().crossVectors(n, x);
+  const m = new THREE.Matrix4().makeBasis(x, y, n);
+  const q = new THREE.Quaternion().setFromRotationMatrix(m);
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(tiltDeg)));
+  const pos = center.clone().add(rel).addScaledVector(n, lift);
+  return { pos, q };
+}
+
+function buildCharacter({ fur = true } = {}) {
+  const mats = {
+    yellow: new THREE.MeshPhysicalMaterial({ color: PALETTE.yellow, metalness: 0.7, roughness: 0.3, emissive: new THREE.Color(PALETTE.yellow), emissiveIntensity: 0.12, envMapIntensity: 3 }),
+    inner: new THREE.MeshPhysicalMaterial({ color: PALETTE.yellowInner, roughness: 0.95, sheen: 1, sheenColor: new THREE.Color('#f7d98a'), emissive: new THREE.Color(PALETTE.yellowInner), emissiveIntensity: 0.35 }),
+    cream: new THREE.MeshPhysicalMaterial({ color: PALETTE.cream, roughness: 0.5, clearcoat: 0.6, clearcoatRoughness: 0.2, emissive: new THREE.Color(PALETTE.cream), emissiveIntensity: 0.22 }),
+    nose: Object.assign(plastic(PALETTE.nose, 0.6, 0.25), { side: THREE.DoubleSide }),
+    lid: plastic(PALETTE.lid, 0.6, 0.4),
+    black: plastic(PALETTE.black, 0.6, 0),
+    foot: plastic(PALETTE.foot, 0.6, 0.18),
+  };
+  const F = fur;
+  const root = new THREE.Group();
+  root.name = 'Gopi_Root';
+
+  // ---- body: barrel, narrower toward the neck ----
+  const bodyC = new THREE.Vector3(-0.02, 0.68, 0);
+  const bodyR = new THREE.Vector3(0.7, 0.38, 0.4);
+  const body = new THREE.Group();
+  body.name = 'Body';
+  at(body, bodyC.x, bodyC.y, bodyC.z);
+  body.userData.origin = bodyC.clone();
+  body.add(
+    furPart(
+      'Body_Fur',
+      ellipsoid(bodyR.x, bodyR.y, bodyR.z, 112, 80, (v) => {
+        boxy(v, bodyR, 4, 0.55);
+        const t = Math.max(0, v.y / bodyR.y);
+        v.z *= 1 - t * 0.1;
+      }),
+      { fur: F, len: 0.028, density: 95, seed: 1 }
+    )
+  );
+  root.add(body);
+
+  // ---- legs: straight pillars with round tan foot caps (pivot at hip) ----
+  const legs = {};
+  [
+    ['LegFL', 0.34, 0.21],
+    ['LegFR', 0.34, -0.21],
+    ['LegBL', -0.5, 0.22],
+    ['LegBR', -0.5, -0.22],
+  ].forEach(([name, x, z], i) => {
+    const hip = new THREE.Vector3(x, 0.42, z);
+    const leg = new THREE.Group();
+    leg.name = name;
+    at(leg, hip.x, hip.y, hip.z);
+    const lg = ellipsoid(0.14, 0.22, 0.14, 32, 24, (v) => {
+      const ny = v.y / 0.22;
+      const k = 1 + (1 - Math.min(1, ny * ny)) * 0.0; // pillar silhouette
+      v.x *= k; v.z *= k;
+    });
+    lg.translate(0, -0.14, 0);
+    leg.add(furPart(name + '_Fur', lg, { fur: F, len: 0.026, density: 105, seed: 10 + i }));
+    const foot = new THREE.Mesh(ellipsoid(0.136, 0.074, 0.136, 32, 20), mats.foot);
+    foot.name = name + '_Foot';
+    foot.position.set(0.012, -0.345, 0);
+    leg.add(foot);
+    root.add(leg);
+    legs[name] = leg;
+  });
+
+  // ---- tail (pom-pom, high on the rump) ----
+  const tail = new THREE.Group();
+  tail.name = 'Tail';
+  at(tail, -0.7, 0.96, 0);
+  const pom = furPart('Tail_Fur', ellipsoid(0.16, 0.16, 0.16, 40, 28), { fur: F, len: 0.034, density: 95, seed: 20 });
+  pom.position.set(-0.03, 0.06, 0);
+  tail.add(pom);
+  root.add(tail);
+
+  // ---- head: big, wide, sits on the body like a cap ----
+  const neck = new THREE.Vector3(0.16, 0.99, 0);
+  const headC = new THREE.Vector3(0.38, 1.32, 0);
+  const headR = new THREE.Vector3(0.5, 0.4, 0.47);
+  const head = new THREE.Group();
+  head.name = 'Head';
+  at(head, neck.x, neck.y, neck.z);
+  const headMesh = furPart(
+    'Head_Fur',
+    ellipsoid(headR.x, headR.y, headR.z, 112, 80, (v) => {
+      // squarer, flatter-topped "plush block" head
+      boxy(v, headR, 4, 0.35);
+    }),
+    { fur: F, len: 0.028, density: 95, seed: 30 }
+  );
+  headMesh.position.copy(headC).sub(neck);
+  head.add(headMesh);
+  root.add(head);
+
+  // ears: upright rounded triangles, set on the top corners, gold inside facing forward
+  const earG = earGeometry();
+  ['L', 'R'].forEach((side) => {
+    const s = side === 'L' ? 1 : -1;
+    const ear = new THREE.Group();
+    ear.name = 'Ear' + side;
+    ear.position.set(0.21, 1.55, s * 0.29).sub(neck);
+    ear.rotation.set(s * 0.14, 0, 0.1); // lean outward and slightly back
+    ear.add(furPart('Ear' + side + '_Fur', earG, { fur: F, len: 0.018, layers: 16, density: 150, seed: 40 + s }));
+    const innerGeo = ellipsoid(0.038, 0.15, 0.135, 28, 22, (v) => {
+      const t = (v.y / 0.15 + 1) / 2;
+      v.z *= 1 - Math.pow(t, 1.4) * 0.75;
+      v.y += 0.15;
+    });
+    const inner = furPart('Ear' + side + '_Inner', innerGeo, { fur: F, color: PALETTE.yellowInner, len: 0.012, layers: 10, density: 220, clump: 45, seed: 60 + s, colors: ['#8f5f20', '#c98f30', '#efc060'] });
+    inner.position.set(0.062, 0.03, 0);
+    ear.add(inner);
+    head.add(ear);
+  });
+
+  // mane: three small stepped fur lobes down the back of the head
+  [
+    ['Mane1', [-0.01, 1.56, 0.0], [0.1, 0.08, 0.2], -0.3],
+    ['Mane2', [-0.08, 1.4, 0.0], [0.11, 0.085, 0.23], -0.45],
+    ['Mane3', [-0.04, 1.24, 0.0], [0.1, 0.08, 0.21], -0.3],
+  ].forEach(([name, p, r, rotZ], i) => {
+    const t = furPart(name, ellipsoid(r[0], r[1], r[2], 28, 20), { fur: F, len: 0.024, layers: 18, density: 120, seed: 50 + i });
+    t.position.set(p[0], p[1], p[2]).sub(neck);
+    t.rotation.z = rotZ;
+    head.add(t);
+  });
+
+  // ---- eyes: inset oval patches on the front-sides, heavy lid, pupils toward the nose ----
+  ['L', 'R'].forEach((side) => {
+    const s = side === 'L' ? 1 : -1;
+    const bendEye = (v) => { v.z -= 1.2 * v.x * v.x + 1.35 * v.y * v.y; };
+    const eye = new THREE.Group();
+    eye.name = 'Eye' + side;
+    const az = THREE.MathUtils.degToRad(38);
+    const ep = onSurface(headC, headR, new THREE.Vector3(Math.cos(az), -0.1, Math.sin(az) * s), 0, 0.03, 0.35);
+    eye.position.copy(ep.pos).sub(neck);
+    eye.quaternion.copy(ep.q);
+    const rim = new THREE.Mesh(ellipsoid(0.143, 0.178, 0.02, 48, 32, bendEye), mats.black);
+    rim.name = 'Eye' + side + '_Rim';
+    eye.add(rim);
+    const white = new THREE.Mesh(ellipsoid(0.138, 0.173, 0.024, 48, 32, bendEye), mats.cream);
+    white.name = 'Eye' + side + '_White';
+    white.position.z = 0.006;
+    eye.add(white);
+    const pupil = new THREE.Group();
+    pupil.name = 'Pupil' + side;
+    pupil.position.set(0.046 * s, -0.034, 0.018);
+    const pm = new THREE.Mesh(ellipsoid(0.064, 0.068, 0.02, 32, 24, bendEye), mats.black);
+    pm.name = 'Pupil' + side + '_Mesh';
+    pupil.add(pm);
+    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.012, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+    hl.name = 'Pupil' + side + '_Highlight';
+    hl.position.set(-0.014, 0.02, 0.02);
+    pupil.add(hl);
+    eye.add(pupil);
+    // heavy upper lid, slopes down toward the nose
+    const lidGeo = ellipsoid(0.141, 0.175, 0.028, 48, 32, (v) => { if (v.y < 0.05) v.y = 0.05; bendEye(v); });
+    const lid = new THREE.Group();
+    lid.name = 'Lid' + side;
+    lid.rotation.z = -0.13 * s;
+    const lidMesh = new THREE.Mesh(lidGeo, mats.lid);
+    lidMesh.name = 'Lid' + side + '_Mesh';
+    lidMesh.position.z = 0.008;
+    lid.add(lidMesh);
+    const lidLine = new THREE.Mesh(ellipsoid(0.128, 0.004, 0.006, 40, 8, bendEye), mats.black);
+    lidLine.name = 'Lid' + side + '_Line';
+    lidLine.position.set(0, 0.05, 0.02);
+    lid.add(lidLine);
+    eye.add(lid);
+    head.add(eye);
+  });
+
+  // ---- muzzle, nose, mouth: centered on the face front ----
+  const muzC = new THREE.Vector3(0.76, 1.25, 0);
+  const muzR = new THREE.Vector3(0.15, 0.13, 0.17);
+  const muzzle = furPart('Muzzle', ellipsoid(muzR.x, muzR.y, muzR.z, 40, 28), { fur: F, len: 0.014, density: 160, seed: 35 });
+  muzzle.position.copy(muzC).sub(neck);
+  head.add(muzzle);
+
+  // nose: cream shield pad (wide top, narrower bottom) on top-front of the muzzle
+  const nose = new THREE.Mesh(
+    ellipsoid(0.04, 0.056, 0.085, 32, 22, (v) => { v.z *= 1 + 0.42 * (v.y / 0.056); }),
+    mats.nose
+  );
+  nose.name = 'Nose';
+  nose.position.set(0.906, 1.322, 0).sub(neck);
+  nose.rotation.z = 0.35;
+  head.add(nose);
+
+  // mouth: one wide flat crescent (smile), bent around the muzzle
+  {
+    const { pos, q } = onSurface(muzC, muzR, new THREE.Vector3(1, -0.2, 0), 0, 0.03);
+    const mouth = new THREE.Mesh(crescentGeometry(0.125, 0.07, 0.014, 2.9, 3.8), mats.nose);
+    mouth.name = 'Mouth';
+    mouth.position.copy(pos).sub(neck);
+    mouth.quaternion.copy(q);
+    head.add(mouth);
+  }
+
+  // ---- glyphs: thin raised gold comb letters ----
+  const glyphSpecs = [
+    // name, parent, center, radii, dir, tilt(deg), size
+    ['Glyph_Forehead', head, headC, headR, [-0.3, 0.3, 0.9], -20, { n: 2, W: 0.16, H: 0.13, prong: 0.03, base: 0.03 }],
+    ['Glyph_Mid', body, bodyC, bodyR, [0.4, -0.2, 0.88], -3, { n: 3, W: 0.52, H: 0.17, prong: 0.036, base: 0.036 }],
+    ['Glyph_Shoulder', body, bodyC, bodyR, [0.65, 0.25, 0.7], -5, { n: 3, W: 0.32, H: 0.12, prong: 0.032, base: 0.032 }],
+    ['Glyph_Back', body, bodyC, bodyR, [-0.2, 0.6, 0.78], 22, { n: 3, W: 0.32, H: 0.12, prong: 0.032, base: 0.032 }],
+    ['Glyph_Low', body, bodyC, bodyR, [-0.55, -0.12, 0.85], 12, { n: 3, W: 0.26, H: 0.11, prong: 0.03, base: 0.03 }],
+    ['Glyph_Rump', body, bodyC, bodyR, [-0.78, 0.15, 0.62], 80, { n: 3, W: 0.32, H: 0.12, prong: 0.03, base: 0.03 }],
+    ['Glyph_ChestHigh', body, bodyC, bodyR, [1, 0.25, 0.3], -3, { n: 3, W: 0.34, H: 0.12, prong: 0.032, base: 0.032 }, ['R']],
+    ['Glyph_ChestLow', body, bodyC, bodyR, [1, -0.2, 0.3], 4, { n: 3, W: 0.46, H: 0.15, prong: 0.036, base: 0.036 }, ['L']],
+  ];
+  glyphSpecs.forEach(([name, parent, c, r, dir, tilt, sz, sides]) => {
+    (sides || ['L', 'R']).forEach((side) => {
+      const s = side === 'L' ? 1 : -1;
+      const d = new THREE.Vector3(dir[0], dir[1], dir[2] * s);
+      const { pos, q } = onSurface(c, r, d, s * tilt, 0.026, parent === body ? 0.55 : 0.35);
+      const geo = glyphGeometry(sz.n, sz.W, sz.H, sz.prong, sz.base, 0.022);
+      const m = new THREE.Mesh(geo, mats.yellow);
+      m.name = name + '_' + side;
+      m.position.copy(pos).sub(parent.userData.origin || parent.position);
+      m.quaternion.copy(q);
+      parent.add(m);
+    });
+  });
+
+  root.userData.rig = { body, head, tail, legs };
+  return root;
+}
+
+/** Remove viewer-only fur shells for clean GLB export. */
+function stripFur(root) {
+  const rm = [];
+  root.traverse((o) => o.userData.isFur && rm.push(o));
+  rm.forEach((o) => o.parent.remove(o));
+}
+
+// ---------- animations (AnimationClips, exported to GLB as well) ----------
+
+const qTrack = (node, times, eulers) =>
+  new THREE.QuaternionKeyframeTrack(
+    node + '.quaternion',
+    times,
+    eulers.flatMap((e) => eul(...e).toArray())
+  );
+const vTrack = (node, prop, times, vals) =>
+  new THREE.VectorKeyframeTrack(node + '.' + prop, times, vals.flat());
+
+function buildClips(root) {
+  const pos = (n) => root.getObjectByName(n).position.toArray();
+  const rot = (n) => {
+    const o = root.getObjectByName(n);
+    return [o.rotation.x, o.rotation.y, o.rotation.z];
+  };
+  const headP = pos('Head'), bodyP = pos('Body'), rootP = [0, 0, 0];
+  const ears = { L: rot('EarL'), R: rot('EarR') };
+
+  // IDLE – 4 s loop: breathing, head sway, ear twitch, tail wag, blink
+  const T = [0, 1, 2, 3, 4];
+  const idle = new THREE.AnimationClip('Idle', 4, [
+    vTrack('Body', 'scale', T, [[1, 1, 1], [1.012, 1.025, 1.012], [1, 1, 1], [1.012, 1.025, 1.012], [1, 1, 1]]),
+    qTrack('Head', T, [[0, 0, 0], [0, 0.12, 0.03], [0, 0, 0.05], [0, -0.12, 0.02], [0, 0, 0]]),
+    qTrack('EarL', [0, 1.6, 1.7, 1.8, 4], [ears.L, ears.L, [ears.L[0], ears.L[1], ears.L[2] - 0.28], ears.L, ears.L]),
+    qTrack('EarR', [0, 2.6, 2.7, 2.8, 4], [ears.R, ears.R, [ears.R[0], ears.R[1], ears.R[2] - 0.28], ears.R, ears.R]),
+    qTrack('Tail', [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4], [
+      [0, 0, 0], [0.2, 0, 0], [0, 0, 0], [-0.2, 0, 0], [0, 0, 0], [0.2, 0, 0], [0, 0, 0], [-0.2, 0, 0], [0, 0, 0],
+    ]),
+    vTrack('EyeL', 'scale', [0, 3.0, 3.07, 3.14, 4], [[1, 1, 1], [1, 1, 1], [1, 0.08, 1], [1, 1, 1], [1, 1, 1]]),
+    vTrack('EyeR', 'scale', [0, 3.0, 3.07, 3.14, 4], [[1, 1, 1], [1, 1, 1], [1, 0.08, 1], [1, 1, 1], [1, 1, 1]]),
+  ]);
+
+  // WALK – 1 s loop (diagonal gait) + body bob
+  const W = [0, 0.25, 0.5, 0.75, 1];
+  const sw = 0.55;
+  const walk = new THREE.AnimationClip('Walk', 1, [
+    qTrack('LegFL', W, [[0, 0, -sw], [0, 0, 0], [0, 0, sw], [0, 0, 0], [0, 0, -sw]]),
+    qTrack('LegBR', W, [[0, 0, -sw], [0, 0, 0], [0, 0, sw], [0, 0, 0], [0, 0, -sw]]),
+    qTrack('LegFR', W, [[0, 0, sw], [0, 0, 0], [0, 0, -sw], [0, 0, 0], [0, 0, sw]]),
+    qTrack('LegBL', W, [[0, 0, sw], [0, 0, 0], [0, 0, -sw], [0, 0, 0], [0, 0, sw]]),
+    vTrack('Gopi_Root', 'position', W, [[0, 0, 0], [0, 0.03, 0], [0, 0, 0], [0, 0.03, 0], [0, 0, 0]]),
+    qTrack('Body', W, [[0.03, 0, 0.02], [0, 0, 0], [-0.03, 0, -0.02], [0, 0, 0], [0.03, 0, 0.02]]),
+    qTrack('Head', W, [[0, 0, 0.04], [0, 0, 0], [0, 0, -0.04], [0, 0, 0], [0, 0, 0.04]]),
+    qTrack('Tail', W, [[0.25, 0, 0], [0, 0, 0], [-0.25, 0, 0], [0, 0, 0], [0.25, 0, 0]]),
+  ]);
+
+  // HOP – 1.2 s, squash & stretch, ears trail
+  const H = [0, 0.2, 0.45, 0.7, 0.9, 1.2];
+  const hop = new THREE.AnimationClip('Hop', 1.2, [
+    vTrack('Gopi_Root', 'position', H, [[0, 0, 0], [0, -0.04, 0], [0, 0.42, 0], [0, 0.42, 0], [0, 0, 0], [0, 0, 0]]),
+    vTrack('Gopi_Root', 'scale', H, [[1, 1, 1], [1.1, 0.88, 1.1], [0.92, 1.12, 0.92], [0.95, 1.06, 0.95], [1.12, 0.84, 1.12], [1, 1, 1]]),
+    qTrack('LegFL', H, [[0, 0, 0], [0, 0, 0], [0, 0, 0.5], [0, 0, 0.5], [0, 0, 0], [0, 0, 0]]),
+    qTrack('LegFR', H, [[0, 0, 0], [0, 0, 0], [0, 0, 0.5], [0, 0, 0.5], [0, 0, 0], [0, 0, 0]]),
+    qTrack('LegBL', H, [[0, 0, 0], [0, 0, 0], [0, 0, -0.5], [0, 0, -0.5], [0, 0, 0], [0, 0, 0]]),
+    qTrack('LegBR', H, [[0, 0, 0], [0, 0, 0], [0, 0, -0.5], [0, 0, -0.5], [0, 0, 0], [0, 0, 0]]),
+    qTrack('Head', H, [[0, 0, 0], [0, 0, -0.12], [0, 0, 0.18], [0, 0, 0.1], [0, 0, -0.12], [0, 0, 0]]),
+    qTrack('EarL', H, [ears.L, ears.L, [ears.L[0], 0, ears.L[2] - 0.35], [ears.L[0], 0, ears.L[2] - 0.2], ears.L, ears.L]),
+    qTrack('EarR', H, [ears.R, ears.R, [ears.R[0], 0, ears.R[2] - 0.35], [ears.R[0], 0, ears.R[2] - 0.2], ears.R, ears.R]),
+    qTrack('Tail', H, [[0, 0, 0], [0.2, 0, 0], [-0.4, 0, 0], [-0.3, 0, 0], [0.3, 0, 0], [0, 0, 0]]),
+  ]);
+
+  return [idle, walk, hop];
+}
+
+
+try { if (new URLSearchParams(location.search).get('q') === 'hq') FUR.layerScale = 2.2; } catch (e) {}
+
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.35;
+
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0.1, 0.98, 0);
+controls.enableDamping = true;
+controls.minDistance = 1.2; controls.maxDistance = 9;
+
+// lights: warm key, orange rim from behind, navy fill
+const key = new THREE.DirectionalLight('#fff1d6', 1.7);
+key.position.set(2.5, 4, 3); key.castShadow = true;
+key.shadow.mapSize.set(4096, 4096);
+Object.assign(key.shadow.camera, { left:-2, right:2, top:2, bottom:-2, near:0.5, far:12 });
+key.shadow.radius = 8; key.shadow.bias = -0.0004;
+scene.add(key);
+const rimL = new THREE.DirectionalLight('#ffae1a', 3.0); rimL.position.set(-3, 2, -3); scene.add(rimL);
+const rimR = new THREE.DirectionalLight('#ffae1a', 1.6); rimR.position.set(3, 1.5, -3); scene.add(rimR);
+const hemi = new THREE.HemisphereLight('#6a70ff', '#201a40', 0.55);
+scene.add(hemi);
+
+const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.ShadowMaterial({ opacity: 0.35 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+// "Video" scene: sand floor, dunes, gold location pin, falling confetti
+const scenic = new THREE.Group(); scenic.visible = false; scene.add(scenic);
+const sandMat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 });
+const sand = new THREE.Mesh(new THREE.CircleGeometry(30, 64), sandMat('#ecc886'));
+sand.rotation.x = -Math.PI / 2; sand.receiveShadow = true; scenic.add(sand);
+[[-6, -9, 5, 2.4, 3.5, '#efc982'], [5, -11, 6, 3.2, 4, '#e8bb6f'], [0, -14, 9, 3.6, 5, '#f2d08f'], [-9, -4, 3, 1.8, 3, '#e9c07a'], [8, -5, 3.4, 2, 3, '#f0cb88']].forEach(([x, z, sx, sy, sz, c]) => {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), sandMat(c));
+  m.position.set(x, 0, z); m.scale.set(sx, sy, sz); m.receiveShadow = true; scenic.add(m);
+});
+{
+  const ps = new THREE.Shape();
+  ps.moveTo(0, -2.3); ps.bezierCurveTo(-0.5, -1.3, -1.1, -0.6, -1.1, 0.2); ps.absarc(0, 0.2, 1.1, Math.PI, 0, true); ps.bezierCurveTo(1.1, -0.6, 0.5, -1.3, 0, -2.3);
+  const hole = new THREE.Path(); hole.absarc(0, 0.2, 0.45, 0, Math.PI * 2, true); ps.holes.push(hole);
+  const pin = new THREE.Mesh(new THREE.ExtrudeGeometry(ps, { depth: 0.5, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 6, curveSegments: 40 }),
+    new THREE.MeshStandardMaterial({ color: '#e0a93a', metalness: 0.35, roughness: 0.45 }));
+  pin.position.set(3.4, 3.4, -6); pin.rotation.y = -0.35; scenic.add(pin);
+}
+const confetti = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.015, 0.16), new THREE.MeshStandardMaterial({ color: '#e8b94a', metalness: 0.9, roughness: 0.25, envMapIntensity: 3 }), 220);
+const confData = Array.from({ length: 220 }, () => ({ x: (Math.random() - 0.5) * 10, y: Math.random() * 6, z: Math.random() * 7 - 4, sp: 0.2 + Math.random() * 0.4, rx: Math.random() * 6, ry: Math.random() * 6, rs: 1 + Math.random() * 2 }));
+const dummy = new THREE.Object3D();
+function updConfetti(t) {
+  confData.forEach((d, i) => {
+    dummy.position.set(d.x, (((d.y - t * d.sp) % 6) + 6) % 6, d.z);
+    dummy.rotation.set(d.rx + t * d.rs, d.ry + t * d.rs * 0.7, 0);
+    dummy.updateMatrix(); confetti.setMatrixAt(i, dummy.matrix);
+  });
+  confetti.instanceMatrix.needsUpdate = true;
+}
+updConfetti(0); scenic.add(confetti);
+
+// character
+let hero, mixer, clips, actions = {}, current = null, currentName = 'Idle';
+function createHero() {
+  if (hero) scene.remove(hero);
+  hero = buildCharacter({ fur: true });
+  hero.traverse((o) => { if (o.isMesh) { o.castShadow = !o.parent.userData.isFur; } });
+  scene.add(hero);
+  clips = buildClips(hero);
+  mixer = new THREE.AnimationMixer(hero);
+  actions = {}; current = null;
+  clips.forEach((c) => (actions[c.name] = mixer.clipAction(c)));
+  play(currentName);
+}
+createHero();
+document.getElementById('status').remove();
+
+function play(name) {
+  currentName = name;
+  if (current) current.fadeOut(0.25);
+  current = name ? actions[name].reset().fadeIn(0.25).play() : null;
+  if (!name) { mixer.stopAllAction(); hero.position.set(0,0,0); hero.scale.set(1,1,1); }
+  document.querySelectorAll('#anims button').forEach((b) => b.classList.toggle('on', b.dataset.a === name));
+}
+document.getElementById('anims').onclick = (e) => e.target.dataset.a !== undefined && play(e.target.dataset.a);
+
+// views
+const VIEWS = {
+  three: [3.0, 1.75, 3.6], side: [0.1, 1.05, 5.2], front: [5.2, 1.05, 0.0],
+  back: [-5.2, 1.15, 0.0], top: [0.1, 5.8, 0.6], face: [1.6, 1.3, 1.7],
+  facef: [2.7, 1.33, 0.02], ref1: [3.1, 1.5, -3.6], ref2: [5.0, 1.4, 0.5], ref3: [4.0, 1.35, -1.7],
+};
+function view(k) {
+  const v = VIEWS[k];
+  camera.position.set(...v);
+  controls.target.set(k === 'facef' ? 0.6 : k === 'face' ? 0.5 : 0.1, k === 'facef' ? 1.3 : k === 'face' ? 1.12 : 1.0, 0);
+  controls.update();
+  document.querySelectorAll('#views button').forEach((b) => b.classList.toggle('on', b.dataset.v === k));
+}
+document.getElementById('views').onclick = (e) => e.target.dataset.v && view(e.target.dataset.v);
+view('three');
+
+// look
+document.getElementById('turn').onchange = (e) => (controls.autoRotate = e.target.checked);
+controls.autoRotateSpeed = 2.2;
+const shells = () => { const a = []; hero.traverse((o) => o.userData.isFur && a.push(o)); return a; };
+document.getElementById('fur').onchange = (e) => shells().forEach((s) => (s.visible = e.target.checked));
+document.getElementById('rim').oninput = (e) => (furUniforms.uRimStrength.value = +e.target.value, rimL.intensity = 3 * e.target.value / 0.9, rimR.intensity = 1.6 * e.target.value / 0.9);
+document.getElementById('furlen').oninput = (e) => {
+  shells().forEach((g) => g.children.forEach((m) => {
+    m.userData.len0 ??= m.material.uniforms.uLen.value;
+    m.material.uniforms.uLen.value = m.userData.len0 * e.target.value;
+  }));
+};
+
+document.getElementById('quality').onclick = (e) => {
+  const q = e.target.dataset.q; if (!q) return;
+  FUR.layerScale = +q;
+  createHero();
+  shells().forEach((s) => (s.visible = document.getElementById('fur').checked));
+  document.getElementById('furlen').value = 1;
+  document.querySelectorAll('#quality button').forEach((b) => b.classList.toggle('on', b.dataset.q === q));
+};
+
+// backgrounds
+const BG = {
+  midnight: 'radial-gradient(ellipse at 50% 60%, #1d2160 0%, #0e1038 55%, #070820 100%)',
+  sun: 'radial-gradient(ellipse at 50% 45%, #ffe04d 0%, #ffc61a 55%, #f0a800 100%)',
+  studio: 'radial-gradient(ellipse at 50% 40%, #6b6f85 0%, #3a3d52 70%, #25273a 100%)',
+  checker: '',
+  dunes: 'linear-gradient(#fbebc8 0%, #f6dca6 55%, #efcf92 100%)',
+};
+function setBg(k) {
+  document.body.dataset.bg = k;
+  stage.style.background = BG[k];
+  const mid = k === 'midnight';
+  const dunes = k === 'dunes';
+  scenic.visible = dunes; floor.visible = !dunes;
+  scene.fog = dunes ? new THREE.Fog('#f3d89f', 10, 26) : null;
+  key.color.set(dunes ? '#fff0d2' : '#fff1d6'); key.intensity = dunes ? 2.2 : 1.7;
+  hemi.color.set(dunes ? '#fff3dc' : '#6a70ff'); hemi.groundColor.set(dunes ? '#d9a95a' : '#201a40'); hemi.intensity = dunes ? 0.8 : 0.55;
+  rimL.visible = rimR.visible = mid || k === 'studio';
+  furUniforms.uRimStrength.value = mid ? +document.getElementById('rim').value : 0.02;
+  document.querySelectorAll('#bgs button').forEach((b) => b.classList.toggle('on', b.dataset.b === k));
+}
+document.getElementById('bgs').onclick = (e) => e.target.dataset.b && setBg(e.target.dataset.b);
+setBg('midnight');
+
+// loop
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  furUniforms.uTime.value += dt;
+  if (scenic.visible) updConfetti(clock.elapsedTime);
+  mixer.update(dt);
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+</script>
+</html>
