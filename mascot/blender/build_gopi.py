@@ -32,6 +32,16 @@ def srgb(h):
     lin = [(v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4) for v in c]
     return (*lin, 1.0)
 
+# ---------------- proportion tweaks (Blender only) ----------------
+for nm in ('LegFL', 'LegFR', 'LegBL', 'LegBR'):
+    for suffix in ('_Fur_Mesh', '_Foot'):
+        o = bpy.data.objects[nm + suffix]
+        o.scale = (1.14, 1.14, 1.0) if suffix == '_Fur_Mesh' else (1.14, 1.0, 1.14)
+bpy.data.objects['Nose'].scale = (1.3, 1.3, 1.3)
+bpy.data.objects['Mouth'].scale = (1.12, 1.12, 1.12)
+for nm in ('PupilL', 'PupilR'):
+    bpy.data.objects[nm].scale = (1.25, 1.25, 1.25)
+
 # ---------------- materials ----------------
 def principled(name, color, rough=0.5, metal=0.0, **kw):
     m = bpy.data.materials.new(name)
@@ -110,7 +120,7 @@ M = {
     'fuzz': hair_material('Fuzz', '#0a0c2e', '#1b2059', '#3a418a', rough=0.7),
     'hair_gold': hair_material_diffuse('FurGold', '#b07818', '#f0c050', rough=0.7),
     'gold': principled('GlyphGold', '#e6bf5a', 0.32, 0.75),
-    'cream': principled('EyeCream', '#fff1d4', 0.4, 0.0, **{'Coat Weight': 0.25, 'Coat Roughness': 0.15}),
+    'cream': principled('EyeCream', '#fff8e8', 0.3, 0.0, **{'Coat Weight': 0.9, 'Coat Roughness': 0.08}),
     'lid': principled('Lid', '#dcbc88', 0.45),
     'black': principled('Black', '#040408', 0.55, 0.0, **{'Specular IOR Level': 0.25}),
     'nose': principled('NoseCream', '#f1dab4', 0.42, 0.0, **{'Subsurface Weight': 0.15}),
@@ -350,12 +360,20 @@ scene.render.resolution_x = scene.render.resolution_y = (700 if args.quick else 
 scene.render.film_transparent = False
 
 w = bpy.data.worlds.new('World'); scene.world = w; w.use_nodes = True
-bg = w.node_tree.nodes['Background']
-bg.inputs['Color'].default_value = srgb('#e4e0d8'); bg.inputs['Strength'].default_value = 0.4
+wt = w.node_tree
+bgn = wt.nodes['Background']
+tc = wt.nodes.new('ShaderNodeTexCoord'); sep = wt.nodes.new('ShaderNodeSeparateXYZ')
+rampw = wt.nodes.new('ShaderNodeValToRGB')
+rampw.color_ramp.elements[0].position = 0.35; rampw.color_ramp.elements[0].color = srgb('#f3dcae')
+rampw.color_ramp.elements[1].position = 0.75; rampw.color_ramp.elements[1].color = srgb('#aebde6')
+wt.links.new(tc.outputs['Generated'], sep.inputs['Vector'])
+wt.links.new(sep.outputs['Z'], rampw.inputs['Fac'])
+wt.links.new(rampw.outputs['Color'], bgn.inputs['Color'])
+bgn.inputs['Strength'].default_value = 0.75
 
 bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 0, 0))
 floor = bpy.context.object; floor.name = 'Floor'
-floor.data.materials.append(principled('Floor', '#cfc8bb', 0.85))
+floor.data.materials.append(principled('Floor', '#dcc79c', 0.9))
 
 def area_light(name, loc, energy, size, color='#fff2da'):
     d = bpy.data.lights.new(name, 'AREA'); d.energy = energy; d.size = size
@@ -367,15 +385,19 @@ def area_light(name, loc, energy, size, color='#fff2da'):
 
 target = bpy.data.objects.new('Target', None); scene.collection.objects.link(target)
 target.location = (0.1, 0.0, 1.0)
-area_light('Key', (3.5, 3.5, 4.5), 420, 3.0)
-area_light('Fill', (3.5, -4.0, 2.0), 120, 4.0, '#f2f0ec')
-area_light('Rim', (-4.0, 2.5, 3.5), 380, 2.5, '#ffe0a8')
-area_light('Top', (0.2, 0.0, 6.0), 160, 4.0)
+area_light('Key', (3.5, 3.5, 4.5), 520, 3.0, '#ffe3bc')
+area_light('Fill', (3.5, -4.0, 2.0), 150, 4.5, '#d3deff')
+area_light('RimA', (-4.0, 2.6, 3.2), 1100, 1.8, '#ffc27a')
+area_light('RimB', (-3.2, -3.4, 3.0), 800, 1.8, '#ffd9a0')
+area_light('Top', (0.2, 0.0, 6.0), 140, 4.0, '#fff4e0')
 
 cam_d = bpy.data.cameras.new('Cam'); cam_d.lens = 55
 cam = bpy.data.objects.new('Cam', cam_d); scene.collection.objects.link(cam)
 c = cam.constraints.new('TRACK_TO'); c.target = target; c.track_axis = 'TRACK_NEGATIVE_Z'; c.up_axis = 'UP_Y'
 scene.camera = cam
+cam_d.dof.use_dof = True
+cam_d.dof.focus_object = target
+cam_d.dof.aperture_fstop = 4.5
 
 # three.js (x, y, z) -> blender (x, -z, y)
 VIEWS = {
